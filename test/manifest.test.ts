@@ -79,7 +79,7 @@ test('package wires local test hooks and GitHub Actions test workflow', async ()
     readonly devDependencies?: Record<string, unknown>;
   };
 
-  assert.equal(packageJson.scripts?.['test'], 'npm run compile && node --test "out/test/**/*.test.js"');
+  assert.equal(packageJson.scripts?.['test'], 'npm run compile && node scripts/run-tests.cjs');
   assert.equal(packageJson.scripts?.['hooks:install'], undefined);
   assert.equal(packageJson.scripts?.['prepare'], 'husky');
   assert.equal(typeof packageJson.devDependencies?.['husky'], 'string');
