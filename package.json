@@ -108,6 +108,7 @@
   },
   "scripts": {
     "compile": "tsc -p ./",
+    "prepare": "husky",
     "watch": "tsc -watch -p ./",
     "test": "npm run compile && node --test \"out/test/**/*.test.js\"",
     "vscode:prepublish": "npm run compile"
@@ -115,6 +116,7 @@
   "devDependencies": {
     "@types/node": "20.14.8",
     "@types/vscode": "1.90.0",
+    "husky": "^9.1.7",
     "typescript": "^5.8.3"
   }
 }

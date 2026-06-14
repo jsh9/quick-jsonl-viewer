@@ -34,4 +34,6 @@ npm install
 npm test
 ```
 
+`npm install` installs Husky hooks automatically. The pre-commit hook runs `npm test`.
+
 Use VS Code's extension host launch flow to test the viewer manually with the small and large files in `sample-data/`.

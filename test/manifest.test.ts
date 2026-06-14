@@ -71,3 +71,26 @@ test('package contributes JSONL viewer as the default editor association', async
     )
   );
 });
+
+test('package wires local test hooks and GitHub Actions test workflow', async () => {
+  const packageJsonPath = path.join(process.cwd(), 'package.json');
+  const packageJson = JSON.parse(await fs.readFile(packageJsonPath, 'utf8')) as {
+    readonly scripts?: Record<string, unknown>;
+    readonly devDependencies?: Record<string, unknown>;
+  };
+
+  assert.equal(packageJson.scripts?.['test'], 'npm run compile && node --test "out/test/**/*.test.js"');
+  assert.equal(packageJson.scripts?.['hooks:install'], undefined);
+  assert.equal(packageJson.scripts?.['prepare'], 'husky');
+  assert.equal(typeof packageJson.devDependencies?.['husky'], 'string');
+
+  const preCommitHook = await fs.readFile(path.join(process.cwd(), '.husky', 'pre-commit'), 'utf8');
+  assert.match(preCommitHook, /npm test/);
+  await assert.rejects(fs.access(path.join(process.cwd(), '.githooks', 'pre-commit')));
+  await assert.rejects(fs.access(path.join(process.cwd(), 'scripts', 'install-git-hooks.cjs')));
+
+  const workflow = await fs.readFile(path.join(process.cwd(), '.github', 'workflows', 'test.yml'), 'utf8');
+  assert.match(workflow, /HUSKY: 0/);
+  assert.match(workflow, /npm ci/);
+  assert.match(workflow, /npm test/);
+});
