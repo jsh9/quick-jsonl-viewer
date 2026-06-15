@@ -104,7 +104,7 @@ test('full-file indexing handles line offsets and stream chunk boundaries', asyn
   const filePath = await writeFixture('chunk-boundary.jsonl', '{"a":1}\n{"b":2}\n{"c":3}');
   const index = await indexJsonlFile(filePath, { chunkSize: 3 });
 
-  assert.equal(index.lineCount, 3);
+  assert.equal(index.indexedLineCount, 3);
   assert.equal(index.indexedEndOffset, index.fileSize);
   assert.equal(index.isComplete, true);
   assert.equal(index.fileSize, Buffer.byteLength('{"a":1}\n{"b":2}\n{"c":3}'));
@@ -115,7 +115,7 @@ test('full-file indexing does not add a phantom line for trailing newline', asyn
   const filePath = await writeFixture('trailing-index.jsonl', '{"a":1}\n{"b":2}\n');
   const index = await indexJsonlFile(filePath, { chunkSize: 4 });
 
-  assert.equal(index.lineCount, 2);
+  assert.equal(index.indexedLineCount, 2);
   assert.equal(index.indexedEndOffset, index.fileSize);
   assert.equal(index.isComplete, true);
   assert.deepEqual(index.lineOffsets, [0, 8]);
@@ -125,13 +125,13 @@ test('prefix indexing stops after the requested line limit without fetching the 
   const filePath = await writeFixture('prefix-limit.jsonl', '{"a":1}\n{"b":2}\n{"c":3}');
   const index = await indexJsonlFile(filePath, { chunkSize: 64, lineLimit: 2 });
 
-  assert.equal(index.lineCount, 2);
+  assert.equal(index.indexedLineCount, 2);
   assert.equal(index.indexedEndOffset, Buffer.byteLength('{"a":1}\n{"b":2}\n'));
   assert.equal(index.isComplete, false);
   assert.deepEqual(index.lineOffsets, [0, 8]);
 
   const rows = await fetchJsonlRows(filePath, index, { start: 0, count: 2, indent: 2 });
-  assert.equal(rows.totalLines, 2);
+  assert.equal(rows.indexedLineCount, 2);
   assert.equal(rows.entries.length, 2);
   assert.equal(rows.entries[0]?.raw, '{"a":1}');
   assert.equal(rows.entries[1]?.raw, '{"b":2}');
@@ -142,7 +142,7 @@ test('prefix indexing is complete when the line limit exceeds file length', asyn
   const filePath = await writeFixture('prefix-complete.jsonl', '{"a":1}\n{"b":2}');
   const index = await indexJsonlFile(filePath, { chunkSize: 3, lineLimit: 10 });
 
-  assert.equal(index.lineCount, 2);
+  assert.equal(index.indexedLineCount, 2);
   assert.equal(index.indexedEndOffset, index.fileSize);
   assert.equal(index.isComplete, true);
   assert.deepEqual(index.lineOffsets, [0, 8]);
@@ -152,27 +152,41 @@ test('prefix indexing does not add a phantom row when the limited prefix ends at
   const filePath = await writeFixture('prefix-trailing-newline.jsonl', '{"a":1}\n{"b":2}\n');
   const index = await indexJsonlFile(filePath, { chunkSize: 64, lineLimit: 2 });
 
-  assert.equal(index.lineCount, 2);
+  assert.equal(index.indexedLineCount, 2);
   assert.equal(index.indexedEndOffset, index.fileSize);
   assert.equal(index.isComplete, true);
   assert.deepEqual(index.lineOffsets, [0, 8]);
 });
 
+test('prefix indexing rejects invalid line limits instead of falling back to full indexing', async () => {
+  const filePath = await writeFixture('invalid-prefix-limit.jsonl', '{"a":1}\n{"b":2}');
+
+  await assert.rejects(
+    indexJsonlFile(filePath, { lineLimit: -1 }),
+    /lineLimit must be 0 or a positive whole number/
+  );
+
+  await assert.rejects(
+    indexJsonlFile(filePath, { lineLimit: Number.NaN }),
+    /lineLimit must be 0 or a positive whole number/
+  );
+});
+
 test('full-file indexing reports progress', async () => {
   const filePath = await writeFixture('progress.jsonl', '{"a":1}\n{"b":2}\n{"c":3}');
-  const progress: Array<{ bytesRead: number; totalBytes: number; percent: number; lineCount: number }> = [];
+  const progress: Array<{ bytesRead: number; totalBytes: number; percent: number; indexedLineCount: number }> = [];
   const index = await indexJsonlFile(filePath, {
     chunkSize: 4,
     progressIntervalMs: 0,
     onProgress: (event) => progress.push(event)
   });
 
-  assert.equal(index.lineCount, 3);
+  assert.equal(index.indexedLineCount, 3);
   assert.ok(progress.length >= 2);
   assert.equal(progress[0]?.bytesRead, 0);
   assert.equal(progress.at(-1)?.bytesRead, index.fileSize);
   assert.equal(progress.at(-1)?.percent, 100);
-  assert.equal(progress.at(-1)?.lineCount, 3);
+  assert.equal(progress.at(-1)?.indexedLineCount, 3);
 });
 
 test('range fetching returns formatted rows and invalid JSON rows', async () => {
@@ -181,7 +195,7 @@ test('range fetching returns formatted rows and invalid JSON rows', async () => 
   const rows = await fetchJsonlRows(filePath, index, { start: 1, count: 2, indent: 4 });
 
   assert.equal(rows.start, 1);
-  assert.equal(rows.totalLines, 3);
+  assert.equal(rows.indexedLineCount, 3);
   assert.equal(rows.entries.length, 2);
   assert.equal(rows.entries[0]?.lineNumber, 2);
   assert.equal(rows.entries[0]?.kind, 'error');
@@ -202,7 +216,7 @@ test('range fetching clamps out-of-range requests', async () => {
 
   assert.equal(rows.start, 2);
   assert.equal(rows.entries.length, 0);
-  assert.equal(rows.totalLines, 2);
+  assert.equal(rows.indexedLineCount, 2);
 });
 
 test('full-file indexing can be cancelled', async () => {

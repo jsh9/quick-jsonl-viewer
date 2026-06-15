@@ -53,7 +53,7 @@ export interface CountJsonlLinesOptions {
 export interface JsonlLineIndex {
   readonly fileSize: number;
   readonly lineOffsets: number[];
-  readonly lineCount: number;
+  readonly indexedLineCount: number;
   readonly indexedEndOffset: number;
   readonly isComplete: boolean;
 }
@@ -62,7 +62,7 @@ export interface JsonlIndexProgress {
   readonly bytesRead: number;
   readonly totalBytes: number;
   readonly percent: number;
-  readonly lineCount: number;
+  readonly indexedLineCount: number;
 }
 
 export interface IndexJsonlFileOptions {
@@ -82,7 +82,7 @@ export interface FetchJsonlRowsOptions {
 export interface JsonlRows {
   readonly start: number;
   readonly entries: JsonlEntry[];
-  readonly totalLines: number;
+  readonly indexedLineCount: number;
 }
 
 export class JsonlOperationCancelledError extends Error {
@@ -250,7 +250,7 @@ export async function indexJsonlFile(filePath: string, options: IndexJsonlFileOp
 
   const stats = await fsp.stat(filePath);
   const totalBytes = stats.size;
-  const lineLimit = normalizeOptionalLineLimit(options.lineLimit);
+  const lineLimit = parseOptionalLineLimit(options.lineLimit);
   const lineOffsets: number[] = totalBytes > 0 && lineLimit !== 0 ? [0] : [];
   const progressIntervalMs = options.progressIntervalMs ?? 100;
   let bytesRead = 0;
@@ -273,7 +273,7 @@ export async function indexJsonlFile(filePath: string, options: IndexJsonlFileOp
       bytesRead,
       totalBytes,
       percent: totalBytes === 0 ? 100 : Math.min(100, (bytesRead / totalBytes) * 100),
-      lineCount: lineOffsets.length
+      indexedLineCount: lineOffsets.length
     });
   };
 
@@ -282,7 +282,7 @@ export async function indexJsonlFile(filePath: string, options: IndexJsonlFileOp
     return {
       fileSize: totalBytes,
       lineOffsets,
-      lineCount: 0,
+      indexedLineCount: 0,
       indexedEndOffset: 0,
       isComplete: true
     };
@@ -295,7 +295,7 @@ export async function indexJsonlFile(filePath: string, options: IndexJsonlFileOp
     return {
       fileSize: totalBytes,
       lineOffsets,
-      lineCount: 0,
+      indexedLineCount: 0,
       indexedEndOffset,
       isComplete
     };
@@ -353,7 +353,7 @@ export async function indexJsonlFile(filePath: string, options: IndexJsonlFileOp
   return {
     fileSize: totalBytes,
     lineOffsets,
-    lineCount: lineOffsets.length,
+    indexedLineCount: lineOffsets.length,
     indexedEndOffset,
     isComplete
   };
@@ -364,15 +364,15 @@ export async function fetchJsonlRows(
   lineIndex: JsonlLineIndex,
   options: FetchJsonlRowsOptions
 ): Promise<JsonlRows> {
-  const start = clampInteger(options.start, 0, lineIndex.lineCount);
-  const count = clampInteger(options.count, 0, lineIndex.lineCount - start);
-  const end = Math.min(lineIndex.lineCount, start + count);
+  const start = clampInteger(options.start, 0, lineIndex.indexedLineCount);
+  const count = clampInteger(options.count, 0, lineIndex.indexedLineCount - start);
+  const end = Math.min(lineIndex.indexedLineCount, start + count);
 
   if (count === 0 || start >= end) {
     return {
       start,
       entries: [],
-      totalLines: lineIndex.lineCount
+      indexedLineCount: lineIndex.indexedLineCount
     };
   }
 
@@ -384,7 +384,7 @@ export async function fetchJsonlRows(
     return {
       start,
       entries: [],
-      totalLines: lineIndex.lineCount
+      indexedLineCount: lineIndex.indexedLineCount
     };
   }
 
@@ -400,7 +400,7 @@ export async function fetchJsonlRows(
     return {
       start,
       entries,
-      totalLines: lineIndex.lineCount
+      indexedLineCount: lineIndex.indexedLineCount
     };
   } finally {
     await file.close();
@@ -436,13 +436,13 @@ function normalizeInteger(value: unknown, fallback: number, minimum: number): nu
   return value;
 }
 
-function normalizeOptionalLineLimit(value: unknown): number | undefined {
+function parseOptionalLineLimit(value: unknown): number | undefined {
   if (value === undefined) {
     return undefined;
   }
 
   if (typeof value !== 'number' || !Number.isInteger(value) || value < 0) {
-    return undefined;
+    throw new TypeError('lineLimit must be 0 or a positive whole number.');
   }
 
   return value;

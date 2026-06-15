@@ -182,7 +182,7 @@ class JsonlViewerProvider implements vscode.CustomReadonlyEditorProvider<JsonlDo
       const requestGeneration = generation;
       const requestId = typeof message.requestId === 'string' ? message.requestId : '';
       const mode = getWebviewRenderMode(message.mode);
-      const totalRows = getDisplayRowCount(fullIndex.lineCount, currentSettings.maxLines);
+      const totalRows = getDisplayRowCount(fullIndex.indexedLineCount, currentSettings.maxLines);
       const start = clampMessageInteger(message.start, 0, totalRows);
       const count = clampMessageInteger(message.count, 0, totalRows - start);
       const rows = await fetchJsonlRows(document.uri.fsPath, fullIndex, {
@@ -360,14 +360,14 @@ async function postJsonlData(
         type: 'fullIndexReady',
         payload: {
           ...metadata,
-          lineCount: index.isComplete ? index.lineCount : null,
-          totalRows: index.lineCount,
+          lineCount: index.isComplete ? index.indexedLineCount : null,
+          totalRows: index.indexedLineCount,
           isComplete: index.isComplete
         }
       });
 
-      if (!index.isComplete) {
-        startBackgroundLineCount(uri.fsPath, webview, generation, getLatestGeneration, signal);
+      if (shouldStartExactLineCount(index)) {
+        startExactLineCount(uri.fsPath, webview, generation, getLatestGeneration, signal);
       }
 
       return;
@@ -408,7 +408,9 @@ async function postJsonlData(
       } satisfies JsonlDataPayload
     });
 
-    startBackgroundLineCount(uri.fsPath, webview, generation, getLatestGeneration, signal);
+    if (shouldStartExactLineCount()) {
+      startExactLineCount(uri.fsPath, webview, generation, getLatestGeneration, signal);
+    }
   } catch (error) {
     if (generation !== getLatestGeneration()) {
       return;
@@ -426,7 +428,11 @@ async function postJsonlData(
   }
 }
 
-function startBackgroundLineCount(
+function shouldStartExactLineCount(index?: JsonlLineIndex): boolean {
+  return index ? !index.isComplete : true;
+}
+
+function startExactLineCount(
   filePath: string,
   webview: vscode.Webview,
   generation: number,
@@ -1026,7 +1032,7 @@ function getHtml(fileName: string): string {
           bytesRead: 0,
           totalBytes: message.payload.totalBytes,
           percent: 0,
-          lineCount: 0
+          indexedLineCount: 0
         };
         renderFullIndexing();
         return;
@@ -1251,7 +1257,7 @@ function getHtml(fileName: string): string {
       meta.append(
         textSpan(formatPercent(fullProgress.percent)),
         textSpan(formatBytes(fullProgress.bytesRead) + ' / ' + formatBytes(fullProgress.totalBytes)),
-        textSpan(formatInteger(fullProgress.lineCount) + ' lines found')
+        textSpan(formatInteger(fullProgress.indexedLineCount) + ' lines found')
       );
 
       const cancel = document.createElement('button');
