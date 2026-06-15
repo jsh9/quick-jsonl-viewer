@@ -59,6 +59,7 @@ test('open viewers reload when their file changes', async () => {
   // through a debounce; without this, indexed viewers can keep stale offsets
   // after the underlying JSONL file changes.
   assert.match(source, /const FILE_RELOAD_DEBOUNCE_MS = 150;/);
+  assert.match(source, /const scheduleFileReload = \(\): void => \{[\s\S]*?invalidateExactLineCount\(\);[\s\S]*?fileReloadTimer = setTimeout/);
   assert.match(source, /const scheduleFileReload = \(\): void => \{[\s\S]*?setTimeout\(\(\) => \{[\s\S]*?safeLoad\(\);[\s\S]*?\}, FILE_RELOAD_DEBOUNCE_MS\);/);
   assert.match(source, /vscode\.workspace\.onDidSaveTextDocument\(\(textDocument\) => \{[\s\S]*?scheduleFileReload\(\);/);
   assert.match(source, /nodeFs\.watch\(path\.dirname\(document\.uri\.fsPath\), \(_eventType, changedFileName\) => \{[\s\S]*?changedName === path\.basename\(document\.uri\.fsPath\)[\s\S]*?scheduleFileReload\(\);/);

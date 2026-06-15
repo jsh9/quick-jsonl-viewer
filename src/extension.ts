@@ -262,6 +262,8 @@ class JsonlViewerProvider implements vscode.CustomReadonlyEditorProvider<JsonlDo
 
       // Collapse clustered save/watch events into one reload so the current
       // abort/generation path clears stale indexes without thrashing the UI.
+      invalidateExactLineCount();
+
       if (fileReloadTimer) {
         clearTimeout(fileReloadTimer);
       }
