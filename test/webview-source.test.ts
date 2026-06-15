@@ -60,19 +60,27 @@ test('virtual scrolling uses capped physical spacer and logical offsets', async 
   assert.match(source, /const MAX_VIRTUAL_SCROLL_HEIGHT = 8000000;/);
   assert.match(source, /function getVirtualSpacerHeight\(totalRows, rowMode = mode\) \{[\s\S]*?Math\.min\(getVirtualTotalHeight\(totalRows, rowMode\), MAX_VIRTUAL_SCROLL_HEIGHT\)/);
   assert.match(source, /function scrollToLogicalOffset\(scrollOffset, totalRows, viewportHeight, rowMode = mode\)/);
+  assert.match(source, /function getLogicalViewportBottom\(logicalScrollTop, totalRows, viewportHeight, rowMode = mode\)/);
   assert.match(source, /function logicalToPhysicalOffset\(logicalOffset, totalRows, viewportHeight, rowMode = mode\)/);
   assert.match(source, /getIndexAtScrollOffset\(logicalScrollTop, full\.totalRows\)/);
-  // Locks bottom-edge lookup to the viewport bottom; otherwise a short
-  // virtualized file can request only the first overscan window.
-  assert.match(source, /const logicalScrollBottom = scrollToLogicalOffset\(\s*virtualScroll\.scrollTop \+ virtualScroll\.clientHeight,\s*full\.totalRows,\s*virtualScroll\.clientHeight\s*\);/);
-  assert.match(source, /const logicalScrollBottom = scrollToLogicalOffset\(\s*virtualScroll\.scrollTop \+ virtualScroll\.clientHeight,\s*totalRows,\s*virtualScroll\.clientHeight\s*\);/);
+  // Locks bottom-edge lookup to the helper; otherwise bottom-of-file requests
+  // can stop at the scroll-top maximum and omit final visible rows.
+  assert.match(source, /const logicalScrollBottom = getLogicalViewportBottom\(\s*logicalScrollTop,\s*full\.totalRows,\s*virtualScroll\.clientHeight\s*\);/);
+  assert.match(source, /const logicalScrollBottom = getLogicalViewportBottom\(\s*logicalScrollTop,\s*totalRows,\s*virtualScroll\.clientHeight\s*\);/);
   assert.match(source, /logicalToPhysicalOffset\(getVirtualOffset\(start, rowMode\), totalRows, virtualScroll\.clientHeight, rowMode\)/);
 });
 
-test('virtual scrolling maps non-scrollable viewport bottom to logical bottom', async () => {
+test('virtual scrolling maps viewport bottom to full logical height', async () => {
   const source = await readExtensionSource();
 
-  // Verifies short virtualized files still request every row that fits in the
-  // viewport, because a zero scroll range must not collapse the bottom to top.
+  // Verifies the bottom edge clamps to the content height, not the scroll-top
+  // maximum, so bottom-of-file requests include the final visible rows.
+  assert.match(source, /function getLogicalViewportBottom\(logicalScrollTop, totalRows, viewportHeight, rowMode = mode\) \{[\s\S]*?Math\.min\(getVirtualTotalHeight\(totalRows, rowMode\), logicalScrollTop \+ viewportHeight\)/);
+});
+
+test('virtual scrolling keeps non-scrollable offsets inside logical height', async () => {
+  const source = await readExtensionSource();
+
+  // Verifies a zero scroll range does not collapse every offset to the top.
   assert.match(source, /if \(logicalMax === 0 \|\| physicalMax === 0\) \{\s*return Math\.max\(0, Math\.min\(logicalHeight, scrollOffset\)\);\s*\}/);
 });

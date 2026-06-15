@@ -1389,8 +1389,8 @@ function getHtml(fileName: string): string {
         full.totalRows,
         virtualScroll.clientHeight
       );
-      const logicalScrollBottom = scrollToLogicalOffset(
-        virtualScroll.scrollTop + virtualScroll.clientHeight,
+      const logicalScrollBottom = getLogicalViewportBottom(
+        logicalScrollTop,
         full.totalRows,
         virtualScroll.clientHeight
       );
@@ -1423,8 +1423,8 @@ function getHtml(fileName: string): string {
         totalRows,
         virtualScroll.clientHeight
       );
-      const logicalScrollBottom = scrollToLogicalOffset(
-        virtualScroll.scrollTop + virtualScroll.clientHeight,
+      const logicalScrollBottom = getLogicalViewportBottom(
+        logicalScrollTop,
         totalRows,
         virtualScroll.clientHeight
       );
@@ -1685,6 +1685,15 @@ function getHtml(fileName: string): string {
       }
 
       return Math.max(0, Math.min(logicalMax, (scrollOffset / physicalMax) * logicalMax));
+    }
+
+    function getLogicalViewportBottom(logicalScrollTop, totalRows, viewportHeight, rowMode = mode) {
+      // Scroll-top clamps to logicalMax, but viewport bottom clamps to the
+      // full logical height so the last visible rows remain requestable.
+      return Math.max(
+        0,
+        Math.min(getVirtualTotalHeight(totalRows, rowMode), logicalScrollTop + viewportHeight)
+      );
     }
 
     function logicalToPhysicalOffset(logicalOffset, totalRows, viewportHeight, rowMode = mode) {
