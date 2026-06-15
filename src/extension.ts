@@ -573,6 +573,8 @@ function getHtml(fileName: string): string {
     }
 
     .rows-input {
+      appearance: textfield;
+      -moz-appearance: textfield;
       width: 72px;
       min-width: 0;
       border: 1px solid var(--vscode-input-border, var(--vscode-editorWidget-border));
@@ -581,6 +583,12 @@ function getHtml(fileName: string): string {
       color: var(--vscode-input-foreground);
       background: var(--vscode-input-background);
       font: inherit;
+    }
+
+    .rows-input::-webkit-inner-spin-button,
+    .rows-input::-webkit-outer-spin-button {
+      margin: 0;
+      -webkit-appearance: none;
     }
 
     .rows-input:focus {

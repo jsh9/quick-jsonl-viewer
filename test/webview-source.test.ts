@@ -33,3 +33,10 @@ test('rows input rejects empty values before posting maxLines updates', async ()
   assert.match(source, /if \(rawValue === ''\) \{[\s\S]*?showRowsError\('Rows must be 0 or a positive whole number\.'\);[\s\S]*?return;/);
   assert.match(source, /const value = Number\(rawValue\);/);
 });
+
+test('rows input hides native number spinner controls', async () => {
+  const source = await readExtensionSource();
+
+  assert.match(source, /\.rows-input \{[\s\S]*?appearance: textfield;[\s\S]*?-moz-appearance: textfield;/);
+  assert.match(source, /\.rows-input::-webkit-inner-spin-button,\s*\.rows-input::-webkit-outer-spin-button \{[\s\S]*?-webkit-appearance: none;/);
+});
