@@ -46,10 +46,16 @@ export interface ReadJsonlPreviewOptions {
   readonly progressIntervalMs?: number;
 }
 
+export interface CountJsonlLinesOptions {
+  readonly signal?: AbortSignal;
+}
+
 export interface JsonlLineIndex {
   readonly fileSize: number;
   readonly lineOffsets: number[];
   readonly lineCount: number;
+  readonly indexedEndOffset: number;
+  readonly isComplete: boolean;
 }
 
 export interface JsonlIndexProgress {
@@ -64,6 +70,7 @@ export interface IndexJsonlFileOptions {
   readonly onProgress?: (progress: JsonlIndexProgress) => void;
   readonly progressIntervalMs?: number;
   readonly chunkSize?: number;
+  readonly lineLimit?: number;
 }
 
 export interface FetchJsonlRowsOptions {
@@ -198,7 +205,9 @@ export async function readJsonlPreview(
   };
 }
 
-export async function countJsonlLines(filePath: string): Promise<number> {
+export async function countJsonlLines(filePath: string, options: CountJsonlLinesOptions = {}): Promise<number> {
+  throwIfAborted(options.signal);
+
   const stream = fs.createReadStream(filePath);
   let lineCount = 0;
   let hasBytes = false;
@@ -206,6 +215,8 @@ export async function countJsonlLines(filePath: string): Promise<number> {
 
   try {
     for await (const chunk of stream) {
+      throwIfAborted(options.signal);
+
       const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk as ArrayBuffer);
       hasBytes = hasBytes || buffer.length > 0;
 
@@ -218,10 +229,14 @@ export async function countJsonlLines(filePath: string): Promise<number> {
       if (buffer.length > 0) {
         lastByte = buffer[buffer.length - 1] ?? -1;
       }
+
+      throwIfAborted(options.signal);
     }
   } finally {
     stream.destroy();
   }
+
+  throwIfAborted(options.signal);
 
   if (hasBytes && lastByte !== 10) {
     lineCount += 1;
@@ -235,10 +250,13 @@ export async function indexJsonlFile(filePath: string, options: IndexJsonlFileOp
 
   const stats = await fsp.stat(filePath);
   const totalBytes = stats.size;
-  const lineOffsets: number[] = totalBytes > 0 ? [0] : [];
+  const lineLimit = normalizeOptionalLineLimit(options.lineLimit);
+  const lineOffsets: number[] = totalBytes > 0 && lineLimit !== 0 ? [0] : [];
   const progressIntervalMs = options.progressIntervalMs ?? 100;
   let bytesRead = 0;
   let lastProgressAt = 0;
+  let indexedEndOffset = totalBytes;
+  let isComplete = true;
 
   const emitProgress = (force: boolean): void => {
     if (!options.onProgress) {
@@ -264,7 +282,22 @@ export async function indexJsonlFile(filePath: string, options: IndexJsonlFileOp
     return {
       fileSize: totalBytes,
       lineOffsets,
-      lineCount: 0
+      lineCount: 0,
+      indexedEndOffset: 0,
+      isComplete: true
+    };
+  }
+
+  if (lineLimit === 0) {
+    isComplete = false;
+    indexedEndOffset = 0;
+    emitProgress(true);
+    return {
+      fileSize: totalBytes,
+      lineOffsets,
+      lineCount: 0,
+      indexedEndOffset,
+      isComplete
     };
   }
 
@@ -280,19 +313,36 @@ export async function indexJsonlFile(filePath: string, options: IndexJsonlFileOp
 
       const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk as ArrayBuffer);
       const chunkStart = bytesRead;
+      let shouldStop = false;
 
       for (let index = 0; index < buffer.length; index += 1) {
         if (buffer[index] === 10) {
           const nextLineOffset = chunkStart + index + 1;
+
+          if (lineLimit !== undefined && lineOffsets.length >= lineLimit) {
+            indexedEndOffset = nextLineOffset;
+            isComplete = nextLineOffset >= totalBytes;
+            bytesRead = indexedEndOffset;
+            shouldStop = true;
+            break;
+          }
+
           if (nextLineOffset < totalBytes) {
             lineOffsets.push(nextLineOffset);
           }
         }
       }
 
-      bytesRead += buffer.length;
+      if (!shouldStop) {
+        bytesRead += buffer.length;
+      }
+
       emitProgress(false);
       throwIfAborted(options.signal);
+
+      if (shouldStop) {
+        break;
+      }
     }
 
     emitProgress(true);
@@ -303,7 +353,9 @@ export async function indexJsonlFile(filePath: string, options: IndexJsonlFileOp
   return {
     fileSize: totalBytes,
     lineOffsets,
-    lineCount: lineOffsets.length
+    lineCount: lineOffsets.length,
+    indexedEndOffset,
+    isComplete
   };
 }
 
@@ -325,7 +377,7 @@ export async function fetchJsonlRows(
   }
 
   const startOffset = lineIndex.lineOffsets[start];
-  const endOffset = end < lineIndex.lineOffsets.length ? lineIndex.lineOffsets[end] : lineIndex.fileSize;
+  const endOffset = end < lineIndex.lineOffsets.length ? lineIndex.lineOffsets[end] : lineIndex.indexedEndOffset;
   const length = endOffset - startOffset;
 
   if (length <= 0) {
@@ -379,6 +431,18 @@ export function formatFileSize(bytes: number): string {
 function normalizeInteger(value: unknown, fallback: number, minimum: number): number {
   if (typeof value !== 'number' || !Number.isInteger(value) || value < minimum) {
     return fallback;
+  }
+
+  return value;
+}
+
+function normalizeOptionalLineLimit(value: unknown): number | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (typeof value !== 'number' || !Number.isInteger(value) || value < 0) {
+    return undefined;
   }
 
   return value;

@@ -15,8 +15,7 @@
   "activationEvents": [
     "onCustomEditor:quickJsonlViewer.viewer",
     "onCommand:quickJsonlViewer.openCurrentFile",
-    "onCommand:quickJsonlViewer.openSampleFiles",
-    "onLanguage:jsonl"
+    "onCommand:quickJsonlViewer.openSampleFiles"
   ],
   "extensionKind": [
     "workspace"

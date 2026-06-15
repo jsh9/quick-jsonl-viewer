@@ -20,13 +20,11 @@ import {
 const VIEW_TYPE = 'quickJsonlViewer.viewer';
 const SETTINGS_SECTION = 'quickJsonlViewer';
 const SAMPLE_JSONL_PATHS = ['sample-data/sample-data.jsonl', 'sample-data/large-placeholder.jsonl'];
-const defaultEditorUriKeys = new Set<string>();
 
 type WebviewRenderMode = 'pretty' | 'wrappedRaw' | 'rawLine';
 
 export function activate(context: vscode.ExtensionContext): void {
   context.subscriptions.push(
-    registerAutoOpenJsonlViewer(),
     vscode.commands.registerCommand('quickJsonlViewer.openCurrentFile', (resource?: vscode.Uri) => {
       void openJsonlViewer(resource).catch((error: unknown) => {
         void vscode.window.showErrorMessage(`Quick JSONL Viewer failed to open the file: ${formatError(error)}`);
@@ -48,8 +46,6 @@ export function activate(context: vscode.ExtensionContext): void {
       }
     )
   );
-
-  triggerAutoOpenJsonlTextEditor();
 }
 
 export function deactivate(): void {
@@ -80,35 +76,6 @@ async function openSampleJsonlFiles(extensionUri: vscode.Uri): Promise<void> {
   }
 }
 
-function registerAutoOpenJsonlViewer(): vscode.Disposable {
-  return vscode.window.onDidChangeActiveTextEditor((editor) => {
-    triggerAutoOpenJsonlTextEditor(editor);
-  });
-}
-
-function triggerAutoOpenJsonlTextEditor(editor = vscode.window.activeTextEditor): void {
-  void autoOpenActiveJsonlTextEditor(editor).catch((error: unknown) => {
-    console.warn(`Quick JSONL Viewer failed to auto-open JSONL file: ${formatError(error)}`);
-  });
-}
-
-async function autoOpenActiveJsonlTextEditor(editor = vscode.window.activeTextEditor): Promise<void> {
-  if (!editor || !isJsonlFile(editor.document.uri)) {
-    return;
-  }
-
-  if (defaultEditorUriKeys.has(uriKey(editor.document.uri))) {
-    return;
-  }
-
-  await vscode.commands.executeCommand(
-    'vscode.openWith',
-    editor.document.uri,
-    VIEW_TYPE,
-    editor.viewColumn ?? vscode.ViewColumn.Active
-  );
-}
-
 function getActiveEditorUri(): vscode.Uri | undefined {
   const activeTextEditorUri = vscode.window.activeTextEditor?.document.uri;
 
@@ -131,10 +98,6 @@ function getActiveEditorUri(): vscode.Uri | undefined {
 
 function isJsonlFile(uri: vscode.Uri): boolean {
   return uri.scheme === 'file' && path.extname(uri.fsPath).toLowerCase() === '.jsonl';
-}
-
-function uriKey(uri: vscode.Uri): string {
-  return uri.toString();
 }
 
 class JsonlDocument implements vscode.CustomDocument {
@@ -294,7 +257,6 @@ class JsonlViewerProvider implements vscode.CustomReadonlyEditorProvider<JsonlDo
         }
 
         if (message.type === 'rawContents') {
-          defaultEditorUriKeys.add(uriKey(document.uri));
           void vscode.commands.executeCommand(
             'vscode.openWith',
             document.uri,
@@ -365,6 +327,7 @@ async function postJsonlData(
     };
 
     if (shouldUseIndexedPreview(settings.maxLines)) {
+      const lineLimit = settings.maxLines > 0 ? settings.maxLines : undefined;
       await webview.postMessage({
         type: 'fullIndexStart',
         payload: {
@@ -375,6 +338,7 @@ async function postJsonlData(
 
       const index = await indexJsonlFile(uri.fsPath, {
         signal,
+        lineLimit,
         onProgress: (progress) => {
           if (generation !== getLatestGeneration()) {
             return;
@@ -396,10 +360,16 @@ async function postJsonlData(
         type: 'fullIndexReady',
         payload: {
           ...metadata,
-          lineCount: index.lineCount,
-          totalRows: getDisplayRowCount(index.lineCount, settings.maxLines)
+          lineCount: index.isComplete ? index.lineCount : null,
+          totalRows: index.lineCount,
+          isComplete: index.isComplete
         }
       });
+
+      if (!index.isComplete) {
+        startBackgroundLineCount(uri.fsPath, webview, generation, getLatestGeneration, signal);
+      }
+
       return;
     }
 
@@ -438,27 +408,7 @@ async function postJsonlData(
       } satisfies JsonlDataPayload
     });
 
-    void countJsonlLines(uri.fsPath)
-      .then(async (lineCount) => {
-        if (generation !== getLatestGeneration()) {
-          return;
-        }
-
-        await webview.postMessage({
-          type: 'lineCount',
-          lineCount
-        });
-      })
-      .catch(async (error: unknown) => {
-        if (generation !== getLatestGeneration()) {
-          return;
-        }
-
-        await webview.postMessage({
-          type: 'lineCountError',
-          message: formatError(error)
-        });
-      });
+    startBackgroundLineCount(uri.fsPath, webview, generation, getLatestGeneration, signal);
   } catch (error) {
     if (generation !== getLatestGeneration()) {
       return;
@@ -474,6 +424,36 @@ async function postJsonlData(
       message: formatError(error)
     });
   }
+}
+
+function startBackgroundLineCount(
+  filePath: string,
+  webview: vscode.Webview,
+  generation: number,
+  getLatestGeneration: () => number,
+  signal: AbortSignal
+): void {
+  void countJsonlLines(filePath, { signal })
+    .then(async (lineCount) => {
+      if (generation !== getLatestGeneration() || signal.aborted) {
+        return;
+      }
+
+      await webview.postMessage({
+        type: 'lineCount',
+        lineCount
+      });
+    })
+    .catch(async (error: unknown) => {
+      if (generation !== getLatestGeneration() || isAbortError(error)) {
+        return;
+      }
+
+      await webview.postMessage({
+        type: 'lineCountError',
+        message: formatError(error)
+      });
+    });
 }
 
 function getSettings(): ViewerSettings {
@@ -978,9 +958,19 @@ function getHtml(fileName: string): string {
         return;
       }
 
-      if (message.type === 'lineCount' && data) {
-        data.lineCount = message.lineCount;
-        renderLimitedInfo();
+      if (message.type === 'lineCount') {
+        if (data) {
+          data.lineCount = message.lineCount;
+          renderLimitedInfo();
+          return;
+        }
+
+        if (full) {
+          full.lineCount = message.lineCount;
+          renderFullInfo();
+          return;
+        }
+
         return;
       }
 
@@ -1275,18 +1265,7 @@ function getHtml(fileName: string): string {
 
       setControlsDisabled(false);
       updateModeButtons();
-      fileSize.textContent = full.fileSize;
-      lineCount.textContent = formatInteger(full.lineCount);
-      rowsInput.value = String(full.maxLines);
-      lastSubmittedMaxLines = rowsInput.value;
-      modified.textContent = full.lastModified;
-      if (full.maxLines === 0) {
-        previewStatus.textContent = 'Virtual full-file view';
-      } else if (full.totalRows >= full.lineCount) {
-        previewStatus.textContent = 'Showing all ' + formatInteger(full.lineCount) + ' lines';
-      } else {
-        previewStatus.textContent = 'Showing first ' + formatInteger(full.totalRows) + ' lines';
-      }
+      renderFullInfo();
 
       virtualScroll = document.createElement('div');
       virtualScroll.className = 'virtual-scroll';
@@ -1303,6 +1282,36 @@ function getHtml(fileName: string): string {
       content.replaceChildren(virtualScroll);
 
       requestVisibleRows();
+    }
+
+    function renderFullInfo() {
+      if (!full) {
+        return;
+      }
+
+      fileSize.textContent = full.fileSize;
+      lineCount.textContent = full.lineCount === null ? 'Counting...' : formatInteger(full.lineCount);
+      rowsInput.value = String(full.maxLines);
+      lastSubmittedMaxLines = rowsInput.value;
+      modified.textContent = full.lastModified;
+
+      if (full.maxLines === 0) {
+        previewStatus.textContent = 'Virtual full-file view';
+        return;
+      }
+
+      if (full.lineCount === null) {
+        previewStatus.textContent = 'Showing first ' + formatInteger(full.totalRows) + ' lines';
+        return;
+      }
+
+      if (full.totalRows >= full.lineCount) {
+        previewStatus.textContent = 'Showing all ' + formatInteger(full.lineCount) + ' lines';
+        return;
+      }
+
+      previewStatus.textContent =
+        'Showing first ' + formatInteger(full.totalRows) + ' of ' + formatInteger(full.lineCount) + ' lines';
     }
 
     function scheduleVisibleRowsRequest() {
@@ -1670,7 +1679,13 @@ function getHtml(fileName: string): string {
         return;
       }
 
-      const value = Number(rowsInput.value);
+      const rawValue = rowsInput.value.trim();
+      if (rawValue === '') {
+        showRowsError('Rows must be 0 or a positive whole number.');
+        return;
+      }
+
+      const value = Number(rawValue);
       if (!Number.isInteger(value) || value < 0) {
         showRowsError('Rows must be 0 or a positive whole number.');
         return;

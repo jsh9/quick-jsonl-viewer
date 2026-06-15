@@ -25,3 +25,11 @@ test('raw-line virtual rows stay unwrapped without fixed-height clipping', async
   assert.doesNotMatch(source, /\.virtual-row\.raw-line\s*\{[\s\S]*?height:/);
   assert.doesNotMatch(source, /\.virtual-row\.raw-line \.line-body\s*\{[\s\S]*?overflow-y: hidden;/);
 });
+
+test('rows input rejects empty values before posting maxLines updates', async () => {
+  const source = await readExtensionSource();
+
+  assert.match(source, /const rawValue = rowsInput\.value\.trim\(\);/);
+  assert.match(source, /if \(rawValue === ''\) \{[\s\S]*?showRowsError\('Rows must be 0 or a positive whole number\.'\);[\s\S]*?return;/);
+  assert.match(source, /const value = Number\(rawValue\);/);
+});

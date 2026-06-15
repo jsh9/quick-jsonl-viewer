@@ -60,8 +60,8 @@ test('package contributes JSONL viewer as the default editor association', async
   assert.equal(customEditor?.priority, 'default');
   assert.ok(customEditor?.selector?.some((selector) => selector.filenamePattern === '*.jsonl'));
   assert.ok(Array.isArray(packageJson.activationEvents));
-  assert.ok(packageJson.activationEvents.includes('onLanguage:jsonl'));
   assert.ok(packageJson.activationEvents.includes('onCommand:quickJsonlViewer.openSampleFiles'));
+  assert.ok(!packageJson.activationEvents.includes('onLanguage:jsonl'));
   assert.ok(
     packageJson.contributes?.languages?.some(
       (language) =>
