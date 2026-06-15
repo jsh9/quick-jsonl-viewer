@@ -1678,8 +1678,10 @@ function getHtml(fileName: string): string {
       const logicalMax = Math.max(0, logicalHeight - viewportHeight);
       const physicalMax = Math.max(0, physicalHeight - viewportHeight);
 
+      // With no scrollable range, preserve viewport-bottom offsets so short
+      // virtualized files still request every row that fits onscreen.
       if (logicalMax === 0 || physicalMax === 0) {
-        return 0;
+        return Math.max(0, Math.min(logicalHeight, scrollOffset));
       }
 
       return Math.max(0, Math.min(logicalMax, (scrollOffset / physicalMax) * logicalMax));

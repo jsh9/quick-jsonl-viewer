@@ -62,5 +62,17 @@ test('virtual scrolling uses capped physical spacer and logical offsets', async 
   assert.match(source, /function scrollToLogicalOffset\(scrollOffset, totalRows, viewportHeight, rowMode = mode\)/);
   assert.match(source, /function logicalToPhysicalOffset\(logicalOffset, totalRows, viewportHeight, rowMode = mode\)/);
   assert.match(source, /getIndexAtScrollOffset\(logicalScrollTop, full\.totalRows\)/);
+  // Locks bottom-edge lookup to the viewport bottom; otherwise a short
+  // virtualized file can request only the first overscan window.
+  assert.match(source, /const logicalScrollBottom = scrollToLogicalOffset\(\s*virtualScroll\.scrollTop \+ virtualScroll\.clientHeight,\s*full\.totalRows,\s*virtualScroll\.clientHeight\s*\);/);
+  assert.match(source, /const logicalScrollBottom = scrollToLogicalOffset\(\s*virtualScroll\.scrollTop \+ virtualScroll\.clientHeight,\s*totalRows,\s*virtualScroll\.clientHeight\s*\);/);
   assert.match(source, /logicalToPhysicalOffset\(getVirtualOffset\(start, rowMode\), totalRows, virtualScroll\.clientHeight, rowMode\)/);
+});
+
+test('virtual scrolling maps non-scrollable viewport bottom to logical bottom', async () => {
+  const source = await readExtensionSource();
+
+  // Verifies short virtualized files still request every row that fits in the
+  // viewport, because a zero scroll range must not collapse the bottom to top.
+  assert.match(source, /if \(logicalMax === 0 \|\| physicalMax === 0\) \{\s*return Math\.max\(0, Math\.min\(logicalHeight, scrollOffset\)\);\s*\}/);
 });
