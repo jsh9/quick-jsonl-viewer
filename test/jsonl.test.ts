@@ -100,6 +100,30 @@ test('exact line count handles common newline shapes', async () => {
   }
 });
 
+test('exact line count reports byte and line progress', async () => {
+  // Verifies progress is observable during full-file counts and that the
+  // final event matches the returned count; the webview depends on this to
+  // avoid looking frozen while it still auto-counts large files.
+  const contents = '{"a":1}\n{"b":2}\n{"c":3}';
+  const filePath = await writeFixture('count-progress.jsonl', contents);
+  const progress: Array<{ bytesRead: number; totalBytes: number; percent: number; lineCount: number }> = [];
+
+  const lineCount = await countJsonlLines(filePath, {
+    chunkSize: 4,
+    progressIntervalMs: 0,
+    onProgress: (event) => progress.push(event)
+  });
+
+  assert.equal(lineCount, 3);
+  assert.ok(progress.length >= 2);
+  assert.equal(progress[0]?.bytesRead, 0);
+  assert.equal(progress[0]?.totalBytes, Buffer.byteLength(contents));
+  assert.equal(progress[0]?.lineCount, 0);
+  assert.equal(progress.at(-1)?.bytesRead, Buffer.byteLength(contents));
+  assert.equal(progress.at(-1)?.percent, 100);
+  assert.equal(progress.at(-1)?.lineCount, 3);
+});
+
 test('full-file indexing handles line offsets and stream chunk boundaries', async () => {
   const filePath = await writeFixture('chunk-boundary.jsonl', '{"a":1}\n{"b":2}\n{"c":3}');
   const index = await indexJsonlFile(filePath, { chunkSize: 3 });

@@ -48,6 +48,16 @@ export interface ReadJsonlPreviewOptions {
 
 export interface CountJsonlLinesOptions {
   readonly signal?: AbortSignal;
+  readonly onProgress?: (progress: JsonlLineCountProgress) => void;
+  readonly progressIntervalMs?: number;
+  readonly chunkSize?: number;
+}
+
+export interface JsonlLineCountProgress {
+  readonly bytesRead: number;
+  readonly totalBytes: number;
+  readonly percent: number;
+  readonly lineCount: number;
 }
 
 export interface JsonlLineIndex {
@@ -208,10 +218,39 @@ export async function readJsonlPreview(
 export async function countJsonlLines(filePath: string, options: CountJsonlLinesOptions = {}): Promise<number> {
   throwIfAborted(options.signal);
 
-  const stream = fs.createReadStream(filePath);
+  const stats = await fsp.stat(filePath);
+  const totalBytes = stats.size;
   let lineCount = 0;
   let hasBytes = false;
   let lastByte = -1;
+  let bytesRead = 0;
+  const progressIntervalMs = options.progressIntervalMs ?? 100;
+  let lastProgressAt = 0;
+
+  const emitProgress = (force: boolean): void => {
+    if (!options.onProgress) {
+      return;
+    }
+
+    const now = Date.now();
+    if (!force && now - lastProgressAt < progressIntervalMs) {
+      return;
+    }
+
+    lastProgressAt = now;
+    options.onProgress({
+      bytesRead,
+      totalBytes,
+      percent: totalBytes === 0 ? 100 : Math.min(100, (bytesRead / totalBytes) * 100),
+      lineCount
+    });
+  };
+
+  emitProgress(true);
+
+  const stream = fs.createReadStream(filePath, {
+    highWaterMark: options.chunkSize ?? 64 * 1024
+  });
 
   try {
     for await (const chunk of stream) {
@@ -230,6 +269,8 @@ export async function countJsonlLines(filePath: string, options: CountJsonlLines
         lastByte = buffer[buffer.length - 1] ?? -1;
       }
 
+      bytesRead += buffer.length;
+      emitProgress(false);
       throwIfAborted(options.signal);
     }
   } finally {
@@ -241,6 +282,10 @@ export async function countJsonlLines(filePath: string, options: CountJsonlLines
   if (hasBytes && lastByte !== 10) {
     lineCount += 1;
   }
+
+  // Emit after the no-trailing-newline adjustment so progress listeners see
+  // the same final count returned to callers.
+  emitProgress(true);
 
   return lineCount;
 }

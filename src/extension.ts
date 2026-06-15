@@ -1,3 +1,4 @@
+import * as nodeFs from 'node:fs';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import * as vscode from 'vscode';
@@ -20,6 +21,7 @@ import {
 const VIEW_TYPE = 'quickJsonlViewer.viewer';
 const SETTINGS_SECTION = 'quickJsonlViewer';
 const SAMPLE_JSONL_PATHS = ['sample-data/sample-data.jsonl', 'sample-data/large-placeholder.jsonl'];
+const FILE_RELOAD_DEBOUNCE_MS = 150;
 
 type WebviewRenderMode = 'pretty' | 'wrappedRaw' | 'rawLine';
 
@@ -129,11 +131,88 @@ class JsonlViewerProvider implements vscode.CustomReadonlyEditorProvider<JsonlDo
     let abortController: AbortController | undefined;
     let fullIndex: JsonlLineIndex | undefined;
     let currentSettings = getSettings();
+    let fileReloadTimer: ReturnType<typeof setTimeout> | undefined;
+    let currentFileSnapshot: FileSnapshot | undefined;
+    let exactLineCountCache: ExactLineCountCache | undefined;
+    let exactLineCountRequest: ExactLineCountRequest | undefined;
 
     const cancelCurrentWork = (): void => {
       abortController?.abort();
       abortController = undefined;
       fullIndex = undefined;
+    };
+
+    const abortExactLineCount = (): void => {
+      exactLineCountRequest?.controller.abort();
+      exactLineCountRequest = undefined;
+    };
+
+    const invalidateExactLineCount = (): void => {
+      abortExactLineCount();
+      exactLineCountCache = undefined;
+    };
+
+    const noteFileSnapshot = (snapshot: FileSnapshot): void => {
+      if (currentFileSnapshot && isSameFileSnapshot(currentFileSnapshot, snapshot)) {
+        return;
+      }
+
+      // Treat exact line counts as file-version state, not view state. A real
+      // file change invalidates stale counts; settings-only reloads do not.
+      invalidateExactLineCount();
+      currentFileSnapshot = snapshot;
+    };
+
+    const getCachedLineCount = (snapshot: FileSnapshot): number | undefined =>
+      exactLineCountCache && isSameFileSnapshot(exactLineCountCache.snapshot, snapshot)
+        ? exactLineCountCache.lineCount
+        : undefined;
+
+    const setCachedLineCount = (snapshot: FileSnapshot, lineCount: number): void => {
+      exactLineCountCache = {
+        snapshot,
+        lineCount
+      };
+
+      if (exactLineCountRequest && isSameFileSnapshot(exactLineCountRequest.snapshot, snapshot)) {
+        exactLineCountRequest.controller.abort();
+        exactLineCountRequest = undefined;
+      }
+    };
+
+    const clearExactLineCountRequest = (snapshot: FileSnapshot): void => {
+      if (exactLineCountRequest && isSameFileSnapshot(exactLineCountRequest.snapshot, snapshot)) {
+        exactLineCountRequest = undefined;
+      }
+    };
+
+    const ensureExactLineCount = (snapshot: FileSnapshot): void => {
+      if (getCachedLineCount(snapshot) !== undefined) {
+        return;
+      }
+
+      // Keep line counting single-flight for a snapshot so changing row
+      // limits can rerender without starting another full-file scan.
+      if (exactLineCountRequest && isSameFileSnapshot(exactLineCountRequest.snapshot, snapshot)) {
+        return;
+      }
+
+      abortExactLineCount();
+      const controller = new AbortController();
+      exactLineCountRequest = {
+        snapshot,
+        controller
+      };
+
+      startExactLineCount(
+        document.uri.fsPath,
+        webviewPanel.webview,
+        snapshot,
+        () => currentFileSnapshot,
+        controller.signal,
+        setCachedLineCount,
+        clearExactLineCountRequest
+      );
     };
 
     const load = async (): Promise<void> => {
@@ -153,6 +232,12 @@ class JsonlViewerProvider implements vscode.CustomReadonlyEditorProvider<JsonlDo
         currentSettings,
         (index) => {
           fullIndex = index;
+        },
+        {
+          noteFileSnapshot,
+          getCachedLineCount,
+          setCachedLineCount,
+          ensureExactLineCount
         }
       );
     };
@@ -168,6 +253,23 @@ class JsonlViewerProvider implements vscode.CustomReadonlyEditorProvider<JsonlDo
           message: formatError(error)
         });
       });
+    };
+
+    const scheduleFileReload = (): void => {
+      if (!webviewReady) {
+        return;
+      }
+
+      // Collapse clustered save/watch events into one reload so the current
+      // abort/generation path clears stale indexes without thrashing the UI.
+      if (fileReloadTimer) {
+        clearTimeout(fileReloadTimer);
+      }
+
+      fileReloadTimer = setTimeout(() => {
+        fileReloadTimer = undefined;
+        safeLoad();
+      }, FILE_RELOAD_DEBOUNCE_MS);
     };
 
     const handleFetchRows = async (message: WebviewMessage): Promise<void> => {
@@ -278,8 +380,45 @@ class JsonlViewerProvider implements vscode.CustomReadonlyEditorProvider<JsonlDo
       })
     );
 
+    disposables.push(
+      vscode.workspace.onDidSaveTextDocument((textDocument) => {
+        if (textDocument.uri.toString() === document.uri.toString()) {
+          scheduleFileReload();
+        }
+      })
+    );
+
+    if (document.uri.scheme === 'file') {
+      try {
+        // Watch the parent directory because Node's fs.watch is file-system
+        // dependent; filtering here keeps external edits from using stale
+        // byte offsets while save events still cover normal VS Code edits.
+        const directoryWatcher = nodeFs.watch(path.dirname(document.uri.fsPath), (_eventType, changedFileName) => {
+          const changedName = changedFileName ? changedFileName.toString() : undefined;
+          if (!changedName || changedName === path.basename(document.uri.fsPath)) {
+            scheduleFileReload();
+          }
+        });
+        directoryWatcher.on('error', () => {
+          // Save events still cover VS Code edits when native directory watching fails.
+        });
+        disposables.push({
+          dispose: () => {
+            directoryWatcher.close();
+          }
+        });
+      } catch {
+        // Some filesystems do not support native watching; save events still reload VS Code edits.
+      }
+    }
+
     webviewPanel.onDidDispose(() => {
       cancelCurrentWork();
+      currentFileSnapshot = undefined;
+      abortExactLineCount();
+      if (fileReloadTimer) {
+        clearTimeout(fileReloadTimer);
+      }
       for (const disposable of disposables) {
         disposable.dispose();
       }
@@ -304,7 +443,8 @@ async function postJsonlData(
   getLatestGeneration: () => number,
   signal: AbortSignal,
   settings: ViewerSettings,
-  setFullIndex: (index: JsonlLineIndex) => void
+  setFullIndex: (index: JsonlLineIndex) => void,
+  exactLineCounts: ExactLineCountCoordinator
 ): Promise<void> {
   if (uri.scheme !== 'file') {
     await webview.postMessage({
@@ -318,6 +458,8 @@ async function postJsonlData(
 
   try {
     const stats = await fs.stat(uri.fsPath);
+    const snapshot = getFileSnapshot(stats);
+    exactLineCounts.noteFileSnapshot(snapshot);
     const metadata = {
       fileName: path.basename(uri.fsPath),
       fileSize: formatFileSize(stats.size),
@@ -356,18 +498,23 @@ async function postJsonlData(
       }
 
       setFullIndex(index);
+      if (index.isComplete) {
+        exactLineCounts.setCachedLineCount(snapshot, index.indexedLineCount);
+      }
+
+      const lineCount = exactLineCounts.getCachedLineCount(snapshot);
       await webview.postMessage({
         type: 'fullIndexReady',
         payload: {
           ...metadata,
-          lineCount: index.isComplete ? index.indexedLineCount : null,
+          lineCount: lineCount ?? null,
           totalRows: index.indexedLineCount,
           isComplete: index.isComplete
         }
       });
 
       if (shouldStartExactLineCount(index)) {
-        startExactLineCount(uri.fsPath, webview, generation, getLatestGeneration, signal);
+        exactLineCounts.ensureExactLineCount(snapshot);
       }
 
       return;
@@ -403,13 +550,13 @@ async function postJsonlData(
       type: 'data',
       payload: {
         ...metadata,
-        lineCount: null,
+        lineCount: exactLineCounts.getCachedLineCount(snapshot) ?? null,
         preview
       } satisfies JsonlDataPayload
     });
 
     if (shouldStartExactLineCount()) {
-      startExactLineCount(uri.fsPath, webview, generation, getLatestGeneration, signal);
+      exactLineCounts.ensureExactLineCount(snapshot);
     }
   } catch (error) {
     if (generation !== getLatestGeneration()) {
@@ -435,23 +582,45 @@ function shouldStartExactLineCount(index?: JsonlLineIndex): boolean {
 function startExactLineCount(
   filePath: string,
   webview: vscode.Webview,
-  generation: number,
-  getLatestGeneration: () => number,
-  signal: AbortSignal
+  snapshot: FileSnapshot,
+  getCurrentFileSnapshot: () => FileSnapshot | undefined,
+  signal: AbortSignal,
+  setCachedLineCount: (snapshot: FileSnapshot, lineCount: number) => void,
+  clearExactLineCountRequest: (snapshot: FileSnapshot) => void
 ): void {
-  void countJsonlLines(filePath, { signal })
-    .then(async (lineCount) => {
-      if (generation !== getLatestGeneration() || signal.aborted) {
+  const isCurrentSnapshot = (): boolean => {
+    const currentSnapshot = getCurrentFileSnapshot();
+    return Boolean(currentSnapshot && isSameFileSnapshot(currentSnapshot, snapshot));
+  };
+
+  void countJsonlLines(filePath, {
+    signal,
+    onProgress: (progress) => {
+      // Progress is tied to the file snapshot rather than the render
+      // generation so settings-only reloads can keep the same count alive.
+      if (!isCurrentSnapshot()) {
         return;
       }
 
+      void webview.postMessage({
+        type: 'lineCountProgress',
+        payload: progress
+      });
+    }
+  })
+    .then(async (lineCount) => {
+      if (!isCurrentSnapshot() || signal.aborted) {
+        return;
+      }
+
+      setCachedLineCount(snapshot, lineCount);
       await webview.postMessage({
         type: 'lineCount',
         lineCount
       });
     })
     .catch(async (error: unknown) => {
-      if (generation !== getLatestGeneration() || isAbortError(error)) {
+      if (!isCurrentSnapshot() || isAbortError(error)) {
         return;
       }
 
@@ -459,6 +628,9 @@ function startExactLineCount(
         type: 'lineCountError',
         message: formatError(error)
       });
+    })
+    .finally(() => {
+      clearExactLineCountRequest(snapshot);
     });
 }
 
@@ -488,6 +660,28 @@ interface JsonlDataPayload {
   readonly preview: JsonlPreview;
 }
 
+interface FileSnapshot {
+  readonly size: number;
+  readonly mtimeMs: number;
+}
+
+interface ExactLineCountCache {
+  readonly snapshot: FileSnapshot;
+  readonly lineCount: number;
+}
+
+interface ExactLineCountRequest {
+  readonly snapshot: FileSnapshot;
+  readonly controller: AbortController;
+}
+
+interface ExactLineCountCoordinator {
+  readonly noteFileSnapshot: (snapshot: FileSnapshot) => void;
+  readonly getCachedLineCount: (snapshot: FileSnapshot) => number | undefined;
+  readonly setCachedLineCount: (snapshot: FileSnapshot, lineCount: number) => void;
+  readonly ensureExactLineCount: (snapshot: FileSnapshot) => void;
+}
+
 interface WebviewMessage {
   readonly type?: unknown;
   readonly requestId?: unknown;
@@ -495,6 +689,17 @@ interface WebviewMessage {
   readonly count?: unknown;
   readonly mode?: unknown;
   readonly value?: unknown;
+}
+
+function getFileSnapshot(stats: Pick<nodeFs.Stats, 'size' | 'mtimeMs'>): FileSnapshot {
+  return {
+    size: stats.size,
+    mtimeMs: stats.mtimeMs
+  };
+}
+
+function isSameFileSnapshot(left: FileSnapshot, right: FileSnapshot): boolean {
+  return left.size === right.size && left.mtimeMs === right.mtimeMs;
 }
 
 function formatError(error: unknown): string {
@@ -892,6 +1097,7 @@ function getHtml(fileName: string): string {
     // Cap the physical scrollbar because Chromium loses precision with very
     // tall elements; logical offsets below still cover every indexed row.
     const MAX_VIRTUAL_SCROLL_HEIGHT = 8000000;
+    const MAX_MEASURED_ROW_HEIGHTS = 512;
 
     let mode = 'pretty';
     let viewState = 'loading';
@@ -979,6 +1185,7 @@ function getHtml(fileName: string): string {
         if (data) {
           data.lineCount = message.lineCount;
           data.lineCountState = 'ready';
+          data.lineCountProgress = null;
           renderLimitedInfo();
           return;
         }
@@ -986,6 +1193,7 @@ function getHtml(fileName: string): string {
         if (full) {
           full.lineCount = message.lineCount;
           full.lineCountState = 'ready';
+          full.lineCountProgress = null;
           renderFullInfo();
           return;
         }
@@ -993,15 +1201,37 @@ function getHtml(fileName: string): string {
         return;
       }
 
+      if (message.type === 'lineCountProgress') {
+        const progress = normalizeLineCountProgress(message.payload);
+        if (data) {
+          data.lineCountState = 'counting';
+          data.lineCountProgress = progress;
+          renderLimitedInfo();
+          return;
+        }
+
+        if (full) {
+          full.lineCountState = 'counting';
+          full.lineCountProgress = progress;
+          renderFullInfo();
+          return;
+        }
+
+        setLineCountText('counting', null, progress);
+        return;
+      }
+
       if (message.type === 'lineCountError') {
         if (data) {
           data.lineCountState = 'unavailable';
+          data.lineCountProgress = null;
           renderLimitedInfo();
           return;
         }
 
         if (full) {
           full.lineCountState = 'unavailable';
+          full.lineCountProgress = null;
           renderFullInfo();
           return;
         }
@@ -1226,7 +1456,7 @@ function getHtml(fileName: string): string {
 
     function renderLimitedInfo() {
       fileSize.textContent = data.fileSize;
-      setLineCountText(data.lineCountState, data.lineCount);
+      setLineCountText(data.lineCountState, data.lineCount, data.lineCountProgress);
       rowsInput.value = String(data.maxLines);
       lastSubmittedMaxLines = rowsInput.value;
       modified.textContent = data.lastModified;
@@ -1321,7 +1551,7 @@ function getHtml(fileName: string): string {
       }
 
       fileSize.textContent = full.fileSize;
-      setLineCountText(full.lineCountState, full.lineCount);
+      setLineCountText(full.lineCountState, full.lineCount, full.lineCountProgress);
       rowsInput.value = String(full.maxLines);
       lastSubmittedMaxLines = rowsInput.value;
       modified.textContent = full.lastModified;
@@ -1350,17 +1580,36 @@ function getHtml(fileName: string): string {
       // triggered by mode changes while the numeric count remains nullable.
       return {
         ...payload,
-        lineCountState: payload.lineCount === null ? 'counting' : 'ready'
+        lineCountState: payload.lineCount === null ? 'counting' : 'ready',
+        lineCountProgress: null
       };
     }
 
-    function setLineCountText(state, value) {
+    function setLineCountText(state, value, progress) {
       if (state === 'unavailable') {
         lineCount.textContent = 'Unavailable';
         return;
       }
 
-      lineCount.textContent = state === 'ready' ? formatInteger(value) : 'Counting...';
+      if (state === 'ready') {
+        lineCount.textContent = formatInteger(value);
+        return;
+      }
+
+      lineCount.textContent = progress ? 'Counting ' + formatPercent(progress.percent) : 'Counting...';
+    }
+
+    function normalizeLineCountProgress(payload) {
+      if (!payload || typeof payload.percent !== 'number' || !Number.isFinite(payload.percent)) {
+        return null;
+      }
+
+      return {
+        percent: payload.percent,
+        // Keep the current count in state for future UI use; the top bar only
+        // shows percent today so long scans do not look stuck.
+        lineCount: typeof payload.lineCount === 'number' ? payload.lineCount : null
+      };
     }
 
     function scheduleVisibleRowsRequest() {
@@ -1445,6 +1694,7 @@ function getHtml(fileName: string): string {
       const totalRows = data.preview.entries.length;
       currentVirtualStart = start;
       currentVirtualTotalRows = totalRows;
+      pruneMeasuredRowHeights(start, count);
       virtualSpacer.style.height = String(getVirtualSpacerHeight(totalRows)) + 'px';
       virtualRows.style.transform =
         'translateY(' +
@@ -1471,6 +1721,7 @@ function getHtml(fileName: string): string {
       full.totalRows = totalRows;
       currentVirtualStart = start;
       currentVirtualTotalRows = totalRows;
+      pruneMeasuredRowHeights(start, entries.length);
       virtualSpacer.style.height = String(getVirtualSpacerHeight(totalRows, rowMode)) + 'px';
       virtualRows.style.transform =
         'translateY(' +
@@ -1766,6 +2017,8 @@ function getHtml(fileName: string): string {
         }
       }
 
+      pruneMeasuredRowHeights(currentVirtualStart, virtualRows.children.length);
+
       if (!changed) {
         return;
       }
@@ -1790,6 +2043,35 @@ function getHtml(fileName: string): string {
       measuredRowHeights = new Map();
       currentVirtualStart = 0;
       currentVirtualTotalRows = 0;
+    }
+
+    function pruneMeasuredRowHeights(start, count) {
+      if (measuredRowHeights.size <= MAX_MEASURED_ROW_HEIGHTS) {
+        return;
+      }
+
+      // Retain measurements near the visible window so variable-height rows
+      // stay aligned, but cap old measurements to keep every offset lookup
+      // bounded during long scrolling sessions.
+      const windowStart = Math.max(0, start - OVERSCAN * 4);
+      const windowEnd = start + count + OVERSCAN * 4;
+      for (const index of measuredRowHeights.keys()) {
+        if (index < windowStart || index > windowEnd) {
+          measuredRowHeights.delete(index);
+        }
+      }
+
+      if (measuredRowHeights.size <= MAX_MEASURED_ROW_HEIGHTS) {
+        return;
+      }
+
+      for (const index of measuredRowHeights.keys()) {
+        if (measuredRowHeights.size <= MAX_MEASURED_ROW_HEIGHTS) {
+          return;
+        }
+
+        measuredRowHeights.delete(index);
+      }
     }
 
     function updateModeButtons() {

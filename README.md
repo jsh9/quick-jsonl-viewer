@@ -37,3 +37,13 @@ npm test
 `npm install` installs Husky hooks automatically. The pre-commit hook runs `npm test`.
 
 Use VS Code's extension host launch flow to test the viewer manually with the small and large files in `sample-data/`.
+
+### Maintainer note: sample files
+
+The `Run Extension` launch configuration opens `sample-data/sample-data.jsonl` and `sample-data/large-placeholder.jsonl` through the internal `quickJsonlViewer.openSampleFiles` command. These `.jsonl` files are local-only test fixtures and are ignored by Git. Generate the large file with:
+
+```sh
+python3 sample-data/generate_large_jsonl.py
+```
+
+Create or copy a small `sample-data/sample-data.jsonl` locally when using the launch flow.
