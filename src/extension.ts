@@ -889,6 +889,9 @@ function getHtml(fileName: string): string {
     const WRAPPED_RAW_ROW_HEIGHT = 82;
     const RAW_ROW_HEIGHT = 46;
     const LIMITED_VIRTUAL_THRESHOLD = ${INDEXED_PREVIEW_LINE_THRESHOLD};
+    // Cap the physical scrollbar because Chromium loses precision with very
+    // tall elements; logical offsets below still cover every indexed row.
+    const MAX_VIRTUAL_SCROLL_HEIGHT = 8000000;
 
     let mode = 'pretty';
     let viewState = 'loading';
@@ -963,7 +966,7 @@ function getHtml(fileName: string): string {
 
       if (message.type === 'data') {
         viewState = 'limited';
-        data = message.payload;
+        data = withLineCountState(message.payload);
         full = null;
         previewLoad = null;
         previewProgress = null;
@@ -975,12 +978,14 @@ function getHtml(fileName: string): string {
       if (message.type === 'lineCount') {
         if (data) {
           data.lineCount = message.lineCount;
+          data.lineCountState = 'ready';
           renderLimitedInfo();
           return;
         }
 
         if (full) {
           full.lineCount = message.lineCount;
+          full.lineCountState = 'ready';
           renderFullInfo();
           return;
         }
@@ -989,7 +994,19 @@ function getHtml(fileName: string): string {
       }
 
       if (message.type === 'lineCountError') {
-        lineCount.textContent = 'Unavailable';
+        if (data) {
+          data.lineCountState = 'unavailable';
+          renderLimitedInfo();
+          return;
+        }
+
+        if (full) {
+          full.lineCountState = 'unavailable';
+          renderFullInfo();
+          return;
+        }
+
+        setLineCountText('unavailable', null);
         return;
       }
 
@@ -1048,7 +1065,7 @@ function getHtml(fileName: string): string {
 
       if (message.type === 'fullIndexReady') {
         viewState = 'fullReady';
-        full = message.payload;
+        full = withLineCountState(message.payload);
         fullProgress = null;
         resetVirtualMeasurements();
         renderFullViewer();
@@ -1196,7 +1213,7 @@ function getHtml(fileName: string): string {
 
       virtualSpacer = document.createElement('div');
       virtualSpacer.className = 'virtual-spacer';
-      virtualSpacer.style.height = String(getVirtualTotalHeight(data.preview.entries.length)) + 'px';
+      virtualSpacer.style.height = String(getVirtualSpacerHeight(data.preview.entries.length)) + 'px';
 
       virtualRows = document.createElement('div');
       virtualRows.className = 'virtual-rows';
@@ -1209,7 +1226,7 @@ function getHtml(fileName: string): string {
 
     function renderLimitedInfo() {
       fileSize.textContent = data.fileSize;
-      lineCount.textContent = data.lineCount === null ? 'Counting...' : formatInteger(data.lineCount);
+      setLineCountText(data.lineCountState, data.lineCount);
       rowsInput.value = String(data.maxLines);
       lastSubmittedMaxLines = rowsInput.value;
       modified.textContent = data.lastModified;
@@ -1287,7 +1304,7 @@ function getHtml(fileName: string): string {
 
       virtualSpacer = document.createElement('div');
       virtualSpacer.className = 'virtual-spacer';
-      virtualSpacer.style.height = String(getVirtualTotalHeight(full.totalRows)) + 'px';
+      virtualSpacer.style.height = String(getVirtualSpacerHeight(full.totalRows)) + 'px';
 
       virtualRows = document.createElement('div');
       virtualRows.className = 'virtual-rows';
@@ -1304,7 +1321,7 @@ function getHtml(fileName: string): string {
       }
 
       fileSize.textContent = full.fileSize;
-      lineCount.textContent = full.lineCount === null ? 'Counting...' : formatInteger(full.lineCount);
+      setLineCountText(full.lineCountState, full.lineCount);
       rowsInput.value = String(full.maxLines);
       lastSubmittedMaxLines = rowsInput.value;
       modified.textContent = full.lastModified;
@@ -1328,6 +1345,24 @@ function getHtml(fileName: string): string {
         'Showing first ' + formatInteger(full.totalRows) + ' of ' + formatInteger(full.lineCount) + ' lines';
     }
 
+    function withLineCountState(payload) {
+      // Store count state with the payload so failures survive rerenders
+      // triggered by mode changes while the numeric count remains nullable.
+      return {
+        ...payload,
+        lineCountState: payload.lineCount === null ? 'counting' : 'ready'
+      };
+    }
+
+    function setLineCountText(state, value) {
+      if (state === 'unavailable') {
+        lineCount.textContent = 'Unavailable';
+        return;
+      }
+
+      lineCount.textContent = state === 'ready' ? formatInteger(value) : 'Counting...';
+    }
+
     function scheduleVisibleRowsRequest() {
       if (animationFrame) {
         cancelAnimationFrame(animationFrame);
@@ -1349,10 +1384,20 @@ function getHtml(fileName: string): string {
         return;
       }
 
-      const start = Math.max(0, getIndexAtScrollOffset(virtualScroll.scrollTop, full.totalRows) - OVERSCAN);
+      const logicalScrollTop = scrollToLogicalOffset(
+        virtualScroll.scrollTop,
+        full.totalRows,
+        virtualScroll.clientHeight
+      );
+      const logicalScrollBottom = scrollToLogicalOffset(
+        virtualScroll.scrollTop + virtualScroll.clientHeight,
+        full.totalRows,
+        virtualScroll.clientHeight
+      );
+      const start = Math.max(0, getIndexAtScrollOffset(logicalScrollTop, full.totalRows) - OVERSCAN);
       const end = Math.min(
         full.totalRows,
-        getIndexAtScrollOffset(virtualScroll.scrollTop + virtualScroll.clientHeight, full.totalRows) + OVERSCAN + 1
+        getIndexAtScrollOffset(logicalScrollBottom, full.totalRows) + OVERSCAN + 1
       );
       const count = Math.max(0, end - start);
       const requestId = 'rows-' + String(++latestRequestId);
@@ -1373,10 +1418,20 @@ function getHtml(fileName: string): string {
       }
 
       const totalRows = data.preview.entries.length;
-      const start = Math.max(0, getIndexAtScrollOffset(virtualScroll.scrollTop, totalRows) - OVERSCAN);
+      const logicalScrollTop = scrollToLogicalOffset(
+        virtualScroll.scrollTop,
+        totalRows,
+        virtualScroll.clientHeight
+      );
+      const logicalScrollBottom = scrollToLogicalOffset(
+        virtualScroll.scrollTop + virtualScroll.clientHeight,
+        totalRows,
+        virtualScroll.clientHeight
+      );
+      const start = Math.max(0, getIndexAtScrollOffset(logicalScrollTop, totalRows) - OVERSCAN);
       const end = Math.min(
         totalRows,
-        getIndexAtScrollOffset(virtualScroll.scrollTop + virtualScroll.clientHeight, totalRows) + OVERSCAN + 1
+        getIndexAtScrollOffset(logicalScrollBottom, totalRows) + OVERSCAN + 1
       );
       const count = Math.max(0, end - start);
       renderLimitedVirtualRows(start, count);
@@ -1390,8 +1445,11 @@ function getHtml(fileName: string): string {
       const totalRows = data.preview.entries.length;
       currentVirtualStart = start;
       currentVirtualTotalRows = totalRows;
-      virtualSpacer.style.height = String(getVirtualTotalHeight(totalRows)) + 'px';
-      virtualRows.style.transform = 'translateY(' + String(getVirtualOffset(start)) + 'px)';
+      virtualSpacer.style.height = String(getVirtualSpacerHeight(totalRows)) + 'px';
+      virtualRows.style.transform =
+        'translateY(' +
+        String(logicalToPhysicalOffset(getVirtualOffset(start), totalRows, virtualScroll.clientHeight)) +
+        'px)';
       virtualRows.style.setProperty('--row-height', String(getEstimatedRowHeight()) + 'px');
 
       const fragment = document.createDocumentFragment();
@@ -1413,8 +1471,11 @@ function getHtml(fileName: string): string {
       full.totalRows = totalRows;
       currentVirtualStart = start;
       currentVirtualTotalRows = totalRows;
-      virtualSpacer.style.height = String(getVirtualTotalHeight(totalRows)) + 'px';
-      virtualRows.style.transform = 'translateY(' + String(getVirtualOffset(start)) + 'px)';
+      virtualSpacer.style.height = String(getVirtualSpacerHeight(totalRows, rowMode)) + 'px';
+      virtualRows.style.transform =
+        'translateY(' +
+        String(logicalToPhysicalOffset(getVirtualOffset(start, rowMode), totalRows, virtualScroll.clientHeight, rowMode)) +
+        'px)';
       virtualRows.style.setProperty('--row-height', String(getEstimatedRowHeight(rowMode)) + 'px');
 
       const fragment = document.createDocumentFragment();
@@ -1605,6 +1666,40 @@ function getHtml(fileName: string): string {
       return Math.max(0, total);
     }
 
+    function getVirtualSpacerHeight(totalRows, rowMode = mode) {
+      return Math.min(getVirtualTotalHeight(totalRows, rowMode), MAX_VIRTUAL_SCROLL_HEIGHT);
+    }
+
+    function scrollToLogicalOffset(scrollOffset, totalRows, viewportHeight, rowMode = mode) {
+      // Convert the capped physical scrollbar coordinate back into the full
+      // logical row space so row lookup still reaches the end of huge files.
+      const logicalHeight = getVirtualTotalHeight(totalRows, rowMode);
+      const physicalHeight = getVirtualSpacerHeight(totalRows, rowMode);
+      const logicalMax = Math.max(0, logicalHeight - viewportHeight);
+      const physicalMax = Math.max(0, physicalHeight - viewportHeight);
+
+      if (logicalMax === 0 || physicalMax === 0) {
+        return 0;
+      }
+
+      return Math.max(0, Math.min(logicalMax, (scrollOffset / physicalMax) * logicalMax));
+    }
+
+    function logicalToPhysicalOffset(logicalOffset, totalRows, viewportHeight, rowMode = mode) {
+      // Rendered rows are positioned inside the capped spacer, so logical row
+      // offsets must be compressed to the same physical coordinate system.
+      const logicalHeight = getVirtualTotalHeight(totalRows, rowMode);
+      const physicalHeight = getVirtualSpacerHeight(totalRows, rowMode);
+      const logicalMax = Math.max(0, logicalHeight - viewportHeight);
+      const physicalMax = Math.max(0, physicalHeight - viewportHeight);
+
+      if (logicalMax === 0 || physicalMax === 0 || physicalHeight === logicalHeight) {
+        return logicalOffset;
+      }
+
+      return Math.max(0, Math.min(physicalMax, (logicalOffset / logicalMax) * physicalMax));
+    }
+
     function getVirtualOffset(index, rowMode = mode) {
       const estimatedRowHeight = getEstimatedRowHeight(rowMode);
       let offset = index * estimatedRowHeight;
@@ -1664,8 +1759,20 @@ function getHtml(fileName: string): string {
         return;
       }
 
-      virtualSpacer.style.height = String(getVirtualTotalHeight(currentVirtualTotalRows, rowMode)) + 'px';
-      virtualRows.style.transform = 'translateY(' + String(getVirtualOffset(currentVirtualStart, rowMode)) + 'px)';
+      // Measured row heights can change logical height after render; update the
+      // capped spacer and transform together to keep rows aligned while scrolling.
+      virtualSpacer.style.height = String(getVirtualSpacerHeight(currentVirtualTotalRows, rowMode)) + 'px';
+      virtualRows.style.transform =
+        'translateY(' +
+        String(
+          logicalToPhysicalOffset(
+            getVirtualOffset(currentVirtualStart, rowMode),
+            currentVirtualTotalRows,
+            virtualScroll.clientHeight,
+            rowMode
+          )
+        ) +
+        'px)';
     }
 
     function resetVirtualMeasurements() {

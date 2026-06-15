@@ -40,3 +40,27 @@ test('rows input hides native number spinner controls', async () => {
   assert.match(source, /\.rows-input \{[\s\S]*?appearance: textfield;[\s\S]*?-moz-appearance: textfield;/);
   assert.match(source, /\.rows-input::-webkit-inner-spin-button,\s*\.rows-input::-webkit-outer-spin-button \{[\s\S]*?-webkit-appearance: none;/);
 });
+
+test('line count errors persist through webview rerenders', async () => {
+  const source = await readExtensionSource();
+
+  // Verifies line-count failures are stored in webview state, not only in the
+  // DOM, because mode changes rerender the info bar from that state.
+  assert.match(source, /function withLineCountState\(payload\) \{[\s\S]*?lineCountState: payload\.lineCount === null \? 'counting' : 'ready'/);
+  assert.match(source, /if \(message\.type === 'lineCountError'\) \{[\s\S]*?data\.lineCountState = 'unavailable';[\s\S]*?renderLimitedInfo\(\);/);
+  assert.match(source, /if \(message\.type === 'lineCountError'\) \{[\s\S]*?full\.lineCountState = 'unavailable';[\s\S]*?renderFullInfo\(\);/);
+  assert.match(source, /function setLineCountText\(state, value\) \{[\s\S]*?state === 'unavailable'[\s\S]*?lineCount\.textContent = 'Unavailable';/);
+});
+
+test('virtual scrolling uses capped physical spacer and logical offsets', async () => {
+  const source = await readExtensionSource();
+
+  // Verifies huge logical row ranges are mapped onto a capped physical
+  // scrollbar, because Chromium webviews can clamp very tall elements.
+  assert.match(source, /const MAX_VIRTUAL_SCROLL_HEIGHT = 8000000;/);
+  assert.match(source, /function getVirtualSpacerHeight\(totalRows, rowMode = mode\) \{[\s\S]*?Math\.min\(getVirtualTotalHeight\(totalRows, rowMode\), MAX_VIRTUAL_SCROLL_HEIGHT\)/);
+  assert.match(source, /function scrollToLogicalOffset\(scrollOffset, totalRows, viewportHeight, rowMode = mode\)/);
+  assert.match(source, /function logicalToPhysicalOffset\(logicalOffset, totalRows, viewportHeight, rowMode = mode\)/);
+  assert.match(source, /getIndexAtScrollOffset\(logicalScrollTop, full\.totalRows\)/);
+  assert.match(source, /logicalToPhysicalOffset\(getVirtualOffset\(start, rowMode\), totalRows, virtualScroll\.clientHeight, rowMode\)/);
+});
