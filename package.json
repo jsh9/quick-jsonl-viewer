@@ -5,6 +5,25 @@
   "version": "0.0.1",
   "publisher": "jsh9",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jsh9/quick-jsonl-viewer.git"
+  },
+  "bugs": {
+    "url": "https://github.com/jsh9/quick-jsonl-viewer/issues"
+  },
+  "homepage": "https://github.com/jsh9/quick-jsonl-viewer#readme",
+  "keywords": [
+    "jsonl",
+    "json-lines",
+    "json-lines-viewer",
+    "large-files",
+    "custom-editor"
+  ],
+  "galleryBanner": {
+    "color": "#1f6feb",
+    "theme": "dark"
+  },
   "engines": {
     "vscode": "^1.90.0"
   },

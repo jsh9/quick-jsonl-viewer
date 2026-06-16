@@ -1,0 +1,12 @@
+.vscode/**
+.github/**
+.husky/**
+.githooks/**
+sample-data/**
+scripts/**
+src/**
+test/**
+node_modules/**
+*.vsix
+*.tsbuildinfo
+.DS_Store

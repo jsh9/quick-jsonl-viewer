@@ -1,6 +1,6 @@
 # Quick JSONL Viewer
 
-View and preview large JSONL files very quickly in VS Code.
+Quick JSONL Viewer opens `.jsonl` files in a readonly, formatted VS Code custom editor designed to stay responsive with large JSON Lines files.
 
 ## Features
 
@@ -11,6 +11,12 @@ View and preview large JSONL files very quickly in VS Code.
 - Shows file size, total lines, and last modified time.
 - Keeps large files responsive by defaulting to the first 20 rows.
 - Supports indexed virtual rendering for full-file mode and large row previews.
+
+## Usage
+
+Open any `.jsonl` file in VS Code and Quick JSONL Viewer opens it with the custom viewer by default.
+
+You can also run `Quick JSONL Viewer: Open in Quick JSONL Viewer` from the command palette, the editor title menu, or the Explorer context menu for a `.jsonl` file.
 
 ## Settings
 
