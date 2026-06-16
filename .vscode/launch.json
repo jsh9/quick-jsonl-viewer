@@ -10,9 +10,7 @@
         "--command",
         "quickJsonlViewer.openSampleFiles"
       ],
-      "outFiles": [
-        "${workspaceFolder}/out/**/*.js"
-      ],
+      "outFiles": ["${workspaceFolder}/out/**/*.js"],
       "preLaunchTask": "npm: compile"
     }
   ]

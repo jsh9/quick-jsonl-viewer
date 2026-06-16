@@ -103,7 +103,10 @@ export class JsonlOperationCancelledError extends Error {
 }
 
 export function isAbortError(error: unknown): boolean {
-  return error instanceof JsonlOperationCancelledError || (error instanceof Error && error.name === 'AbortError');
+  return (
+    error instanceof JsonlOperationCancelledError ||
+    (error instanceof Error && error.name === 'AbortError')
+  );
 }
 
 export function normalizeViewerSettings(input: {
@@ -120,11 +123,18 @@ export function shouldUseIndexedPreview(maxLines: number): boolean {
   return maxLines === 0 || maxLines >= INDEXED_PREVIEW_LINE_THRESHOLD;
 }
 
-export function getDisplayRowCount(lineCount: number, maxLines: number): number {
+export function getDisplayRowCount(
+  lineCount: number,
+  maxLines: number
+): number {
   return maxLines === 0 ? lineCount : Math.min(lineCount, maxLines);
 }
 
-export function formatJsonlLine(lineNumber: number, raw: string, indent: number): JsonlEntry {
+export function formatJsonlLine(
+  lineNumber: number,
+  raw: string,
+  indent: number
+): JsonlEntry {
   try {
     const parsed = JSON.parse(raw) as unknown;
     return {
@@ -177,7 +187,10 @@ export async function readJsonlPreview(
     options.onProgress({
       loadedLineCount: entries.length,
       displayLimit,
-      percent: displayLimit <= 0 ? 0 : Math.min(100, (entries.length / displayLimit) * 100)
+      percent:
+        displayLimit <= 0
+          ? 0
+          : Math.min(100, (entries.length / displayLimit) * 100)
     });
   };
 
@@ -215,7 +228,10 @@ export async function readJsonlPreview(
   };
 }
 
-export async function countJsonlLines(filePath: string, options: CountJsonlLinesOptions = {}): Promise<number> {
+export async function countJsonlLines(
+  filePath: string,
+  options: CountJsonlLinesOptions = {}
+): Promise<number> {
   throwIfAborted(options.signal);
 
   const stats = await fsp.stat(filePath);
@@ -241,7 +257,8 @@ export async function countJsonlLines(filePath: string, options: CountJsonlLines
     options.onProgress({
       bytesRead,
       totalBytes,
-      percent: totalBytes === 0 ? 100 : Math.min(100, (bytesRead / totalBytes) * 100),
+      percent:
+        totalBytes === 0 ? 100 : Math.min(100, (bytesRead / totalBytes) * 100),
       lineCount
     });
   };
@@ -256,7 +273,9 @@ export async function countJsonlLines(filePath: string, options: CountJsonlLines
     for await (const chunk of stream) {
       throwIfAborted(options.signal);
 
-      const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk as ArrayBuffer);
+      const buffer = Buffer.isBuffer(chunk)
+        ? chunk
+        : Buffer.from(chunk as ArrayBuffer);
       hasBytes = hasBytes || buffer.length > 0;
 
       for (let index = 0; index < buffer.length; index += 1) {
@@ -290,7 +309,10 @@ export async function countJsonlLines(filePath: string, options: CountJsonlLines
   return lineCount;
 }
 
-export async function indexJsonlFile(filePath: string, options: IndexJsonlFileOptions = {}): Promise<JsonlLineIndex> {
+export async function indexJsonlFile(
+  filePath: string,
+  options: IndexJsonlFileOptions = {}
+): Promise<JsonlLineIndex> {
   throwIfAborted(options.signal);
 
   const stats = await fsp.stat(filePath);
@@ -317,7 +339,8 @@ export async function indexJsonlFile(filePath: string, options: IndexJsonlFileOp
     options.onProgress({
       bytesRead,
       totalBytes,
-      percent: totalBytes === 0 ? 100 : Math.min(100, (bytesRead / totalBytes) * 100),
+      percent:
+        totalBytes === 0 ? 100 : Math.min(100, (bytesRead / totalBytes) * 100),
       indexedLineCount: lineOffsets.length
     });
   };
@@ -356,7 +379,9 @@ export async function indexJsonlFile(filePath: string, options: IndexJsonlFileOp
     for await (const chunk of stream) {
       throwIfAborted(options.signal);
 
-      const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk as ArrayBuffer);
+      const buffer = Buffer.isBuffer(chunk)
+        ? chunk
+        : Buffer.from(chunk as ArrayBuffer);
       const chunkStart = bytesRead;
       let shouldStop = false;
 
@@ -410,7 +435,11 @@ export async function fetchJsonlRows(
   options: FetchJsonlRowsOptions
 ): Promise<JsonlRows> {
   const start = clampInteger(options.start, 0, lineIndex.indexedLineCount);
-  const count = clampInteger(options.count, 0, lineIndex.indexedLineCount - start);
+  const count = clampInteger(
+    options.count,
+    0,
+    lineIndex.indexedLineCount - start
+  );
   const end = Math.min(lineIndex.indexedLineCount, start + count);
 
   if (count === 0 || start >= end) {
@@ -422,7 +451,10 @@ export async function fetchJsonlRows(
   }
 
   const startOffset = lineIndex.lineOffsets[start];
-  const endOffset = end < lineIndex.lineOffsets.length ? lineIndex.lineOffsets[end] : lineIndex.indexedEndOffset;
+  const endOffset =
+    end < lineIndex.lineOffsets.length
+      ? lineIndex.lineOffsets[end]
+      : lineIndex.indexedEndOffset;
   const length = endOffset - startOffset;
 
   if (length <= 0) {
@@ -440,7 +472,13 @@ export async function fetchJsonlRows(
     const { bytesRead } = await file.read(buffer, 0, length, startOffset);
     const text = Buffer.from(buffer.subarray(0, bytesRead)).toString('utf8');
     const rawLines = text.split('\n').slice(0, end - start);
-    const entries = rawLines.map((raw, index) => formatJsonlLine(start + index + 1, stripTrailingCarriageReturn(raw), options.indent));
+    const entries = rawLines.map((raw, index) =>
+      formatJsonlLine(
+        start + index + 1,
+        stripTrailingCarriageReturn(raw),
+        options.indent
+      )
+    );
 
     return {
       start,
@@ -473,8 +511,16 @@ export function formatFileSize(bytes: number): string {
   return value.toFixed(value >= 10 ? 1 : 2) + ' ' + units[unitIndex];
 }
 
-function normalizeInteger(value: unknown, fallback: number, minimum: number): number {
-  if (typeof value !== 'number' || !Number.isInteger(value) || value < minimum) {
+function normalizeInteger(
+  value: unknown,
+  fallback: number,
+  minimum: number
+): number {
+  if (
+    typeof value !== 'number' ||
+    !Number.isInteger(value) ||
+    value < minimum
+  ) {
     return fallback;
   }
 

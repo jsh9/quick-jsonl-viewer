@@ -20,22 +20,34 @@ import {
 
 const VIEW_TYPE = 'quickJsonlViewer.viewer';
 const SETTINGS_SECTION = 'quickJsonlViewer';
-const SAMPLE_JSONL_PATHS = ['sample-data/sample-data.jsonl', 'sample-data/large-placeholder.jsonl'];
+const SAMPLE_JSONL_PATHS = [
+  'sample-data/sample-data.jsonl',
+  'sample-data/large-placeholder.jsonl'
+];
 const FILE_RELOAD_DEBOUNCE_MS = 150;
 
 type WebviewRenderMode = 'pretty' | 'wrappedRaw' | 'rawLine';
 
 export function activate(context: vscode.ExtensionContext): void {
   context.subscriptions.push(
-    vscode.commands.registerCommand('quickJsonlViewer.openCurrentFile', (resource?: vscode.Uri) => {
-      void openJsonlViewer(resource).catch((error: unknown) => {
-        void vscode.window.showErrorMessage(`Quick JSONL Viewer failed to open the file: ${formatError(error)}`);
-      });
-    }),
+    vscode.commands.registerCommand(
+      'quickJsonlViewer.openCurrentFile',
+      (resource?: vscode.Uri) => {
+        void openJsonlViewer(resource).catch((error: unknown) => {
+          void vscode.window.showErrorMessage(
+            `Quick JSONL Viewer failed to open the file: ${formatError(error)}`
+          );
+        });
+      }
+    ),
     vscode.commands.registerCommand('quickJsonlViewer.openSampleFiles', () => {
-      void openSampleJsonlFiles(context.extensionUri).catch((error: unknown) => {
-        void vscode.window.showErrorMessage(`Quick JSONL Viewer failed to open sample files: ${formatError(error)}`);
-      });
+      void openSampleJsonlFiles(context.extensionUri).catch(
+        (error: unknown) => {
+          void vscode.window.showErrorMessage(
+            `Quick JSONL Viewer failed to open sample files: ${formatError(error)}`
+          );
+        }
+      );
     }),
     vscode.window.registerCustomEditorProvider(
       VIEW_TYPE,
@@ -58,23 +70,38 @@ async function openJsonlViewer(resource?: vscode.Uri): Promise<void> {
   const uri = resource ?? getActiveEditorUri();
 
   if (!uri) {
-    void vscode.window.showWarningMessage('Open a JSONL file before running Quick JSONL Viewer.');
+    void vscode.window.showWarningMessage(
+      'Open a JSONL file before running Quick JSONL Viewer.'
+    );
     return;
   }
 
   if (!isJsonlFile(uri)) {
-    void vscode.window.showWarningMessage('Quick JSONL Viewer can only open .jsonl files.');
+    void vscode.window.showWarningMessage(
+      'Quick JSONL Viewer can only open .jsonl files.'
+    );
     return;
   }
 
-  await vscode.commands.executeCommand('vscode.openWith', uri, VIEW_TYPE, vscode.ViewColumn.Active);
+  await vscode.commands.executeCommand(
+    'vscode.openWith',
+    uri,
+    VIEW_TYPE,
+    vscode.ViewColumn.Active
+  );
 }
 
 async function openSampleJsonlFiles(extensionUri: vscode.Uri): Promise<void> {
   for (const [index, relativePath] of SAMPLE_JSONL_PATHS.entries()) {
     const uri = vscode.Uri.joinPath(extensionUri, ...relativePath.split('/'));
-    const column = index === 0 ? vscode.ViewColumn.One : vscode.ViewColumn.Beside;
-    await vscode.commands.executeCommand('vscode.openWith', uri, VIEW_TYPE, column);
+    const column =
+      index === 0 ? vscode.ViewColumn.One : vscode.ViewColumn.Beside;
+    await vscode.commands.executeCommand(
+      'vscode.openWith',
+      uri,
+      VIEW_TYPE,
+      column
+    );
   }
 }
 
@@ -87,7 +114,10 @@ function getActiveEditorUri(): vscode.Uri | undefined {
 
   const input = vscode.window.tabGroups.activeTabGroup.activeTab?.input;
 
-  if (input instanceof vscode.TabInputText || input instanceof vscode.TabInputCustom) {
+  if (
+    input instanceof vscode.TabInputText ||
+    input instanceof vscode.TabInputCustom
+  ) {
     return input.uri;
   }
 
@@ -99,7 +129,9 @@ function getActiveEditorUri(): vscode.Uri | undefined {
 }
 
 function isJsonlFile(uri: vscode.Uri): boolean {
-  return uri.scheme === 'file' && path.extname(uri.fsPath).toLowerCase() === '.jsonl';
+  return (
+    uri.scheme === 'file' && path.extname(uri.fsPath).toLowerCase() === '.jsonl'
+  );
 }
 
 class JsonlDocument implements vscode.CustomDocument {
@@ -153,7 +185,10 @@ class JsonlViewerProvider implements vscode.CustomReadonlyEditorProvider<JsonlDo
     };
 
     const noteFileSnapshot = (snapshot: FileSnapshot): void => {
-      if (currentFileSnapshot && isSameFileSnapshot(currentFileSnapshot, snapshot)) {
+      if (
+        currentFileSnapshot &&
+        isSameFileSnapshot(currentFileSnapshot, snapshot)
+      ) {
         return;
       }
 
@@ -164,24 +199,34 @@ class JsonlViewerProvider implements vscode.CustomReadonlyEditorProvider<JsonlDo
     };
 
     const getCachedLineCount = (snapshot: FileSnapshot): number | undefined =>
-      exactLineCountCache && isSameFileSnapshot(exactLineCountCache.snapshot, snapshot)
+      exactLineCountCache &&
+      isSameFileSnapshot(exactLineCountCache.snapshot, snapshot)
         ? exactLineCountCache.lineCount
         : undefined;
 
-    const setCachedLineCount = (snapshot: FileSnapshot, lineCount: number): void => {
+    const setCachedLineCount = (
+      snapshot: FileSnapshot,
+      lineCount: number
+    ): void => {
       exactLineCountCache = {
         snapshot,
         lineCount
       };
 
-      if (exactLineCountRequest && isSameFileSnapshot(exactLineCountRequest.snapshot, snapshot)) {
+      if (
+        exactLineCountRequest &&
+        isSameFileSnapshot(exactLineCountRequest.snapshot, snapshot)
+      ) {
         exactLineCountRequest.controller.abort();
         exactLineCountRequest = undefined;
       }
     };
 
     const clearExactLineCountRequest = (snapshot: FileSnapshot): void => {
-      if (exactLineCountRequest && isSameFileSnapshot(exactLineCountRequest.snapshot, snapshot)) {
+      if (
+        exactLineCountRequest &&
+        isSameFileSnapshot(exactLineCountRequest.snapshot, snapshot)
+      ) {
         exactLineCountRequest = undefined;
       }
     };
@@ -193,7 +238,10 @@ class JsonlViewerProvider implements vscode.CustomReadonlyEditorProvider<JsonlDo
 
       // Keep line counting single-flight for a snapshot so changing row
       // limits can rerender without starting another full-file scan.
-      if (exactLineCountRequest && isSameFileSnapshot(exactLineCountRequest.snapshot, snapshot)) {
+      if (
+        exactLineCountRequest &&
+        isSameFileSnapshot(exactLineCountRequest.snapshot, snapshot)
+      ) {
         return;
       }
 
@@ -284,9 +332,13 @@ class JsonlViewerProvider implements vscode.CustomReadonlyEditorProvider<JsonlDo
       }
 
       const requestGeneration = generation;
-      const requestId = typeof message.requestId === 'string' ? message.requestId : '';
+      const requestId =
+        typeof message.requestId === 'string' ? message.requestId : '';
       const mode = getWebviewRenderMode(message.mode);
-      const totalRows = getDisplayRowCount(fullIndex.indexedLineCount, currentSettings.maxLines);
+      const totalRows = getDisplayRowCount(
+        fullIndex.indexedLineCount,
+        currentSettings.maxLines
+      );
       const start = clampMessageInteger(message.start, 0, totalRows);
       const count = clampMessageInteger(message.count, 0, totalRows - start);
       const rows = await fetchJsonlRows(document.uri.fsPath, fullIndex, {
@@ -311,8 +363,11 @@ class JsonlViewerProvider implements vscode.CustomReadonlyEditorProvider<JsonlDo
       });
     };
 
-    const handleUpdateMaxLines = async (message: WebviewMessage): Promise<void> => {
-      const value = typeof message.value === 'number' ? message.value : Number.NaN;
+    const handleUpdateMaxLines = async (
+      message: WebviewMessage
+    ): Promise<void> => {
+      const value =
+        typeof message.value === 'number' ? message.value : Number.NaN;
       if (!Number.isInteger(value) || value < 0) {
         await webviewPanel.webview.postMessage({
           type: 'maxLinesError',
@@ -395,12 +450,20 @@ class JsonlViewerProvider implements vscode.CustomReadonlyEditorProvider<JsonlDo
         // Watch the parent directory because Node's fs.watch is file-system
         // dependent; filtering here keeps external edits from using stale
         // byte offsets while save events still cover normal VS Code edits.
-        const directoryWatcher = nodeFs.watch(path.dirname(document.uri.fsPath), (_eventType, changedFileName) => {
-          const changedName = changedFileName ? changedFileName.toString() : undefined;
-          if (!changedName || changedName === path.basename(document.uri.fsPath)) {
-            scheduleFileReload();
+        const directoryWatcher = nodeFs.watch(
+          path.dirname(document.uri.fsPath),
+          (_eventType, changedFileName) => {
+            const changedName = changedFileName
+              ? changedFileName.toString()
+              : undefined;
+            if (
+              !changedName ||
+              changedName === path.basename(document.uri.fsPath)
+            ) {
+              scheduleFileReload();
+            }
           }
-        });
+        );
         directoryWatcher.on('error', () => {
           // Save events still cover VS Code edits when native directory watching fails.
         });
@@ -592,7 +655,9 @@ function startExactLineCount(
 ): void {
   const isCurrentSnapshot = (): boolean => {
     const currentSnapshot = getCurrentFileSnapshot();
-    return Boolean(currentSnapshot && isSameFileSnapshot(currentSnapshot, snapshot));
+    return Boolean(
+      currentSnapshot && isSameFileSnapshot(currentSnapshot, snapshot)
+    );
   };
 
   void countJsonlLines(filePath, {
@@ -644,7 +709,11 @@ function getSettings(): ViewerSettings {
   });
 }
 
-function clampMessageInteger(value: unknown, minimum: number, maximum: number): number {
+function clampMessageInteger(
+  value: unknown,
+  minimum: number,
+  maximum: number
+): number {
   if (typeof value !== 'number' || !Number.isFinite(value)) {
     return minimum;
   }
@@ -680,7 +749,10 @@ interface ExactLineCountRequest {
 interface ExactLineCountCoordinator {
   readonly noteFileSnapshot: (snapshot: FileSnapshot) => void;
   readonly getCachedLineCount: (snapshot: FileSnapshot) => number | undefined;
-  readonly setCachedLineCount: (snapshot: FileSnapshot, lineCount: number) => void;
+  readonly setCachedLineCount: (
+    snapshot: FileSnapshot,
+    lineCount: number
+  ) => void;
   readonly ensureExactLineCount: (snapshot: FileSnapshot) => void;
 }
 
@@ -693,7 +765,9 @@ interface WebviewMessage {
   readonly value?: unknown;
 }
 
-function getFileSnapshot(stats: Pick<nodeFs.Stats, 'size' | 'mtimeMs'>): FileSnapshot {
+function getFileSnapshot(
+  stats: Pick<nodeFs.Stats, 'size' | 'mtimeMs'>
+): FileSnapshot {
   return {
     size: stats.size,
     mtimeMs: stats.mtimeMs
@@ -2178,7 +2252,8 @@ function getHtml(fileName: string): string {
 }
 
 function getNonce(): string {
-  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+  const chars =
+    'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
   let nonce = '';
 
   for (let index = 0; index < 32; index += 1) {

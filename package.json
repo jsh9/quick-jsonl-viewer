@@ -127,15 +127,18 @@
   },
   "scripts": {
     "compile": "tsc -p ./",
+    "format": "prettier . --write --ignore-unknown",
+    "format:check": "prettier . --check --ignore-unknown",
     "prepare": "husky",
     "watch": "tsc -watch -p ./",
-    "test": "npm run compile && node scripts/run-tests.cjs",
+    "test": "npm run format:check && npm run compile && node scripts/run-tests.cjs",
     "vscode:prepublish": "npm run compile"
   },
   "devDependencies": {
     "@types/node": "20.14.8",
     "@types/vscode": "1.90.0",
     "husky": "^9.1.7",
+    "prettier": "^3.8.4",
     "typescript": "^5.8.3"
   }
 }

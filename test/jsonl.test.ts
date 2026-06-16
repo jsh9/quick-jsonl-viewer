@@ -33,7 +33,9 @@ after(async () => {
 test('default limit reads the first 20 lines only', async () => {
   const filePath = await writeFixture(
     'default-limit.jsonl',
-    Array.from({ length: 25 }, (_, index) => JSON.stringify({ index })).join('\n')
+    Array.from({ length: 25 }, (_, index) => JSON.stringify({ index })).join(
+      '\n'
+    )
   );
 
   const settings = normalizeViewerSettings({});
@@ -51,9 +53,15 @@ test('default limit reads the first 20 lines only', async () => {
 test('preview reading reports progress for limited loads', async () => {
   const filePath = await writeFixture(
     'preview-progress.jsonl',
-    Array.from({ length: 5 }, (_, index) => JSON.stringify({ index })).join('\n')
+    Array.from({ length: 5 }, (_, index) => JSON.stringify({ index })).join(
+      '\n'
+    )
   );
-  const progress: Array<{ loadedLineCount: number; displayLimit: number; percent: number }> = [];
+  const progress: Array<{
+    loadedLineCount: number;
+    displayLimit: number;
+    percent: number;
+  }> = [];
 
   const preview = await readJsonlPreview(
     filePath,
@@ -75,7 +83,9 @@ test('preview reading reports progress for limited loads', async () => {
 test('maxLines set to 0 can still read all lines through the preview helper', async () => {
   const filePath = await writeFixture(
     'all-lines.jsonl',
-    Array.from({ length: 25 }, (_, index) => JSON.stringify({ index })).join('\n')
+    Array.from({ length: 25 }, (_, index) => JSON.stringify({ index })).join(
+      '\n'
+    )
   );
 
   const preview = await readJsonlPreview(filePath, { maxLines: 0, indent: 2 });
@@ -106,7 +116,12 @@ test('exact line count reports byte and line progress', async () => {
   // avoid looking frozen while it still auto-counts large files.
   const contents = '{"a":1}\n{"b":2}\n{"c":3}';
   const filePath = await writeFixture('count-progress.jsonl', contents);
-  const progress: Array<{ bytesRead: number; totalBytes: number; percent: number; lineCount: number }> = [];
+  const progress: Array<{
+    bytesRead: number;
+    totalBytes: number;
+    percent: number;
+    lineCount: number;
+  }> = [];
 
   const lineCount = await countJsonlLines(filePath, {
     chunkSize: 4,
@@ -125,7 +140,10 @@ test('exact line count reports byte and line progress', async () => {
 });
 
 test('full-file indexing handles line offsets and stream chunk boundaries', async () => {
-  const filePath = await writeFixture('chunk-boundary.jsonl', '{"a":1}\n{"b":2}\n{"c":3}');
+  const filePath = await writeFixture(
+    'chunk-boundary.jsonl',
+    '{"a":1}\n{"b":2}\n{"c":3}'
+  );
   const index = await indexJsonlFile(filePath, { chunkSize: 3 });
 
   assert.equal(index.indexedLineCount, 3);
@@ -136,7 +154,10 @@ test('full-file indexing handles line offsets and stream chunk boundaries', asyn
 });
 
 test('full-file indexing does not add a phantom line for trailing newline', async () => {
-  const filePath = await writeFixture('trailing-index.jsonl', '{"a":1}\n{"b":2}\n');
+  const filePath = await writeFixture(
+    'trailing-index.jsonl',
+    '{"a":1}\n{"b":2}\n'
+  );
   const index = await indexJsonlFile(filePath, { chunkSize: 4 });
 
   assert.equal(index.indexedLineCount, 2);
@@ -146,7 +167,10 @@ test('full-file indexing does not add a phantom line for trailing newline', asyn
 });
 
 test('prefix indexing stops after the requested line limit without fetching the rest of the file', async () => {
-  const filePath = await writeFixture('prefix-limit.jsonl', '{"a":1}\n{"b":2}\n{"c":3}');
+  const filePath = await writeFixture(
+    'prefix-limit.jsonl',
+    '{"a":1}\n{"b":2}\n{"c":3}'
+  );
   const index = await indexJsonlFile(filePath, { chunkSize: 64, lineLimit: 2 });
 
   assert.equal(index.indexedLineCount, 2);
@@ -154,7 +178,11 @@ test('prefix indexing stops after the requested line limit without fetching the 
   assert.equal(index.isComplete, false);
   assert.deepEqual(index.lineOffsets, [0, 8]);
 
-  const rows = await fetchJsonlRows(filePath, index, { start: 0, count: 2, indent: 2 });
+  const rows = await fetchJsonlRows(filePath, index, {
+    start: 0,
+    count: 2,
+    indent: 2
+  });
   assert.equal(rows.indexedLineCount, 2);
   assert.equal(rows.entries.length, 2);
   assert.equal(rows.entries[0]?.raw, '{"a":1}');
@@ -163,7 +191,10 @@ test('prefix indexing stops after the requested line limit without fetching the 
 });
 
 test('prefix indexing is complete when the line limit exceeds file length', async () => {
-  const filePath = await writeFixture('prefix-complete.jsonl', '{"a":1}\n{"b":2}');
+  const filePath = await writeFixture(
+    'prefix-complete.jsonl',
+    '{"a":1}\n{"b":2}'
+  );
   const index = await indexJsonlFile(filePath, { chunkSize: 3, lineLimit: 10 });
 
   assert.equal(index.indexedLineCount, 2);
@@ -173,7 +204,10 @@ test('prefix indexing is complete when the line limit exceeds file length', asyn
 });
 
 test('prefix indexing does not add a phantom row when the limited prefix ends at a trailing newline', async () => {
-  const filePath = await writeFixture('prefix-trailing-newline.jsonl', '{"a":1}\n{"b":2}\n');
+  const filePath = await writeFixture(
+    'prefix-trailing-newline.jsonl',
+    '{"a":1}\n{"b":2}\n'
+  );
   const index = await indexJsonlFile(filePath, { chunkSize: 64, lineLimit: 2 });
 
   assert.equal(index.indexedLineCount, 2);
@@ -183,7 +217,10 @@ test('prefix indexing does not add a phantom row when the limited prefix ends at
 });
 
 test('prefix indexing rejects invalid line limits instead of falling back to full indexing', async () => {
-  const filePath = await writeFixture('invalid-prefix-limit.jsonl', '{"a":1}\n{"b":2}');
+  const filePath = await writeFixture(
+    'invalid-prefix-limit.jsonl',
+    '{"a":1}\n{"b":2}'
+  );
 
   await assert.rejects(
     indexJsonlFile(filePath, { lineLimit: -1 }),
@@ -197,8 +234,16 @@ test('prefix indexing rejects invalid line limits instead of falling back to ful
 });
 
 test('full-file indexing reports progress', async () => {
-  const filePath = await writeFixture('progress.jsonl', '{"a":1}\n{"b":2}\n{"c":3}');
-  const progress: Array<{ bytesRead: number; totalBytes: number; percent: number; indexedLineCount: number }> = [];
+  const filePath = await writeFixture(
+    'progress.jsonl',
+    '{"a":1}\n{"b":2}\n{"c":3}'
+  );
+  const progress: Array<{
+    bytesRead: number;
+    totalBytes: number;
+    percent: number;
+    indexedLineCount: number;
+  }> = [];
   const index = await indexJsonlFile(filePath, {
     chunkSize: 4,
     progressIntervalMs: 0,
@@ -214,9 +259,16 @@ test('full-file indexing reports progress', async () => {
 });
 
 test('range fetching returns formatted rows and invalid JSON rows', async () => {
-  const filePath = await writeFixture('range.jsonl', '{"a":1}\nnot-json\n{"c":{"d":3}}\n');
+  const filePath = await writeFixture(
+    'range.jsonl',
+    '{"a":1}\nnot-json\n{"c":{"d":3}}\n'
+  );
   const index = await indexJsonlFile(filePath, { chunkSize: 5 });
-  const rows = await fetchJsonlRows(filePath, index, { start: 1, count: 2, indent: 4 });
+  const rows = await fetchJsonlRows(filePath, index, {
+    start: 1,
+    count: 2,
+    indent: 4
+  });
 
   assert.equal(rows.start, 1);
   assert.equal(rows.indexedLineCount, 3);
@@ -236,7 +288,11 @@ test('range fetching returns formatted rows and invalid JSON rows', async () => 
 test('range fetching clamps out-of-range requests', async () => {
   const filePath = await writeFixture('range-clamp.jsonl', '{"a":1}\n{"b":2}');
   const index = await indexJsonlFile(filePath);
-  const rows = await fetchJsonlRows(filePath, index, { start: 10, count: 10, indent: 2 });
+  const rows = await fetchJsonlRows(filePath, index, {
+    start: 10,
+    count: 10,
+    indent: 2
+  });
 
   assert.equal(rows.start, 2);
   assert.equal(rows.entries.length, 0);
@@ -246,7 +302,9 @@ test('range fetching clamps out-of-range requests', async () => {
 test('full-file indexing can be cancelled', async () => {
   const filePath = await writeFixture(
     'cancel.jsonl',
-    Array.from({ length: 100 }, (_, index) => JSON.stringify({ index })).join('\n')
+    Array.from({ length: 100 }, (_, index) => JSON.stringify({ index })).join(
+      '\n'
+    )
   );
   const controller = new AbortController();
 
@@ -322,7 +380,10 @@ test('settings validation falls back for invalid numbers', () => {
 test('large positive row counts use indexed preview and clamp to total lines', () => {
   assert.equal(shouldUseIndexedPreview(0), true);
   assert.equal(shouldUseIndexedPreview(DEFAULT_MAX_LINES), false);
-  assert.equal(shouldUseIndexedPreview(INDEXED_PREVIEW_LINE_THRESHOLD - 1), false);
+  assert.equal(
+    shouldUseIndexedPreview(INDEXED_PREVIEW_LINE_THRESHOLD - 1),
+    false
+  );
   assert.equal(shouldUseIndexedPreview(INDEXED_PREVIEW_LINE_THRESHOLD), true);
   assert.equal(shouldUseIndexedPreview(10_000_000), true);
 
@@ -331,7 +392,10 @@ test('large positive row counts use indexed preview and clamp to total lines', (
   assert.equal(getDisplayRowCount(200_000, 10_000_000), 200_000);
 });
 
-async function writeFixture(fileName: string, contents: string): Promise<string> {
+async function writeFixture(
+  fileName: string,
+  contents: string
+): Promise<string> {
   const filePath = path.join(tempDir, fileName);
   await fs.writeFile(filePath, contents, 'utf8');
   return filePath;

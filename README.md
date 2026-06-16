@@ -26,7 +26,6 @@ Quick JSONL Viewer opens `.jsonl` files in a readonly, formatted VS Code custom 
 
 ![](./images/screenshots/raw-contents.png)
 
-
 ## 3. Usage
 
 Open any `.jsonl` file in VS Code and Quick JSONL Viewer opens it with the custom viewer by default.
@@ -53,9 +52,12 @@ When `quickJsonlViewer.maxLines` is `0` or a large positive preview count, Quick
 ```sh
 npm install
 npm test
+npm run format
 ```
 
 `npm install` installs Husky hooks automatically. The pre-commit hook runs `npm test`.
+Prettier formats the project with an 80-column print width, and `npm test`
+checks formatting before compiling and running the test suite.
 
 Use VS Code's extension host launch flow to test the viewer manually with the small and large files in `sample-data/`.
 

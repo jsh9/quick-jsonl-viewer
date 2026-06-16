@@ -5,7 +5,9 @@ import { test } from 'node:test';
 
 test('package main points to the compiled extension entrypoint', async () => {
   const packageJsonPath = path.join(process.cwd(), 'package.json');
-  const packageJson = JSON.parse(await fs.readFile(packageJsonPath, 'utf8')) as {
+  const packageJson = JSON.parse(
+    await fs.readFile(packageJsonPath, 'utf8')
+  ) as {
     readonly main?: unknown;
   };
 
@@ -21,7 +23,9 @@ test('package main points to the compiled extension entrypoint', async () => {
 
 test('package contributes JSONL viewer as the default editor association', async () => {
   const packageJsonPath = path.join(process.cwd(), 'package.json');
-  const packageJson = JSON.parse(await fs.readFile(packageJsonPath, 'utf8')) as {
+  const packageJson = JSON.parse(
+    await fs.readFile(packageJsonPath, 'utf8')
+  ) as {
     readonly activationEvents?: unknown;
     readonly contributes?: {
       readonly configurationDefaults?: {
@@ -44,7 +48,9 @@ test('package contributes JSONL viewer as the default editor association', async
   };
 
   assert.equal(
-    packageJson.contributes?.configurationDefaults?.['workbench.editorAssociations']?.['*.jsonl'],
+    packageJson.contributes?.configurationDefaults?.[
+      'workbench.editorAssociations'
+    ]?.['*.jsonl'],
     'quickJsonlViewer.viewer'
   );
 
@@ -58,9 +64,17 @@ test('package contributes JSONL viewer as the default editor association', async
   );
 
   assert.equal(customEditor?.priority, 'default');
-  assert.ok(customEditor?.selector?.some((selector) => selector.filenamePattern === '*.jsonl'));
+  assert.ok(
+    customEditor?.selector?.some(
+      (selector) => selector.filenamePattern === '*.jsonl'
+    )
+  );
   assert.ok(Array.isArray(packageJson.activationEvents));
-  assert.ok(packageJson.activationEvents.includes('onCommand:quickJsonlViewer.openSampleFiles'));
+  assert.ok(
+    packageJson.activationEvents.includes(
+      'onCommand:quickJsonlViewer.openSampleFiles'
+    )
+  );
   assert.ok(!packageJson.activationEvents.includes('onLanguage:jsonl'));
   assert.ok(
     packageJson.contributes?.languages?.some(
@@ -72,24 +86,48 @@ test('package contributes JSONL viewer as the default editor association', async
   );
 });
 
-test('package wires local test hooks and GitHub Actions test workflow', async () => {
+test('package wires local test hooks, formatting, and GitHub Actions test workflow', async () => {
   const packageJsonPath = path.join(process.cwd(), 'package.json');
-  const packageJson = JSON.parse(await fs.readFile(packageJsonPath, 'utf8')) as {
+  const packageJson = JSON.parse(
+    await fs.readFile(packageJsonPath, 'utf8')
+  ) as {
     readonly scripts?: Record<string, unknown>;
     readonly devDependencies?: Record<string, unknown>;
   };
 
-  assert.equal(packageJson.scripts?.['test'], 'npm run compile && node scripts/run-tests.cjs');
+  assert.equal(
+    packageJson.scripts?.['test'],
+    'npm run format:check && npm run compile && node scripts/run-tests.cjs'
+  );
+  assert.equal(
+    packageJson.scripts?.['format'],
+    'prettier . --write --ignore-unknown'
+  );
+  assert.equal(
+    packageJson.scripts?.['format:check'],
+    'prettier . --check --ignore-unknown'
+  );
   assert.equal(packageJson.scripts?.['hooks:install'], undefined);
   assert.equal(packageJson.scripts?.['prepare'], 'husky');
   assert.equal(typeof packageJson.devDependencies?.['husky'], 'string');
+  assert.equal(typeof packageJson.devDependencies?.['prettier'], 'string');
 
-  const preCommitHook = await fs.readFile(path.join(process.cwd(), '.husky', 'pre-commit'), 'utf8');
+  const preCommitHook = await fs.readFile(
+    path.join(process.cwd(), '.husky', 'pre-commit'),
+    'utf8'
+  );
   assert.match(preCommitHook, /npm test/);
-  await assert.rejects(fs.access(path.join(process.cwd(), '.githooks', 'pre-commit')));
-  await assert.rejects(fs.access(path.join(process.cwd(), 'scripts', 'install-git-hooks.cjs')));
+  await assert.rejects(
+    fs.access(path.join(process.cwd(), '.githooks', 'pre-commit'))
+  );
+  await assert.rejects(
+    fs.access(path.join(process.cwd(), 'scripts', 'install-git-hooks.cjs'))
+  );
 
-  const workflow = await fs.readFile(path.join(process.cwd(), '.github', 'workflows', 'test.yml'), 'utf8');
+  const workflow = await fs.readFile(
+    path.join(process.cwd(), '.github', 'workflows', 'test.yml'),
+    'utf8'
+  );
   assert.match(workflow, /HUSKY: 0/);
   assert.match(workflow, /npm ci/);
   assert.match(workflow, /npm test/);
