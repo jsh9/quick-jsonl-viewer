@@ -1,0 +1,144 @@
+{
+  "name": "quick-jsonl-viewer",
+  "displayName": "Quick JSONL Viewer",
+  "description": "View and preview large JSONL files in a readonly, formatted VS Code custom editor.",
+  "version": "0.0.1",
+  "publisher": "jsh9",
+  "license": "MIT",
+  "icon": "images/icon.png",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jsh9/quick-jsonl-viewer.git"
+  },
+  "bugs": {
+    "url": "https://github.com/jsh9/quick-jsonl-viewer/issues"
+  },
+  "homepage": "https://github.com/jsh9/quick-jsonl-viewer#readme",
+  "keywords": [
+    "jsonl",
+    "json-lines",
+    "json-lines-viewer",
+    "large-files",
+    "custom-editor"
+  ],
+  "galleryBanner": {
+    "color": "#1f6feb",
+    "theme": "dark"
+  },
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "main": "./out/src/extension.js",
+  "activationEvents": [
+    "onCustomEditor:quickJsonlViewer.viewer",
+    "onCommand:quickJsonlViewer.openCurrentFile",
+    "onCommand:quickJsonlViewer.openSampleFiles"
+  ],
+  "extensionKind": [
+    "workspace"
+  ],
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": true
+    },
+    "virtualWorkspaces": false
+  },
+  "contributes": {
+    "commands": [
+      {
+        "command": "quickJsonlViewer.openCurrentFile",
+        "title": "Open in Quick JSONL Viewer",
+        "category": "Quick JSONL Viewer"
+      }
+    ],
+    "languages": [
+      {
+        "id": "jsonl",
+        "aliases": [
+          "JSON Lines",
+          "jsonl"
+        ],
+        "extensions": [
+          ".jsonl"
+        ]
+      }
+    ],
+    "customEditors": [
+      {
+        "viewType": "quickJsonlViewer.viewer",
+        "displayName": "Quick JSONL Viewer",
+        "selector": [
+          {
+            "filenamePattern": "*.jsonl"
+          },
+          {
+            "filenamePattern": "**/*.jsonl"
+          }
+        ],
+        "priority": "default"
+      }
+    ],
+    "configurationDefaults": {
+      "workbench.editorAssociations": {
+        "*.jsonl": "quickJsonlViewer.viewer"
+      }
+    },
+    "configuration": {
+      "title": "Quick JSONL Viewer",
+      "properties": {
+        "quickJsonlViewer.maxLines": {
+          "type": "integer",
+          "default": 20,
+          "minimum": 0,
+          "description": "Number of JSONL lines to load for display. Set to 0 to index the full file and render visible rows on demand."
+        },
+        "quickJsonlViewer.indent": {
+          "type": "integer",
+          "default": 2,
+          "minimum": 1,
+          "description": "Number of spaces used to indent JSON in Pretty print mode."
+        }
+      }
+    },
+    "menus": {
+      "commandPalette": [
+        {
+          "command": "quickJsonlViewer.openCurrentFile"
+        }
+      ],
+      "editor/title": [
+        {
+          "command": "quickJsonlViewer.openCurrentFile",
+          "when": "resourceExtname == .jsonl",
+          "group": "navigation"
+        }
+      ],
+      "explorer/context": [
+        {
+          "command": "quickJsonlViewer.openCurrentFile",
+          "when": "resourceExtname == .jsonl",
+          "group": "navigation"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "compile": "tsc -p ./",
+    "format": "prettier . --write --ignore-unknown",
+    "format:check": "prettier . --check --ignore-unknown",
+    "prepare": "husky",
+    "watch": "tsc -watch -p ./",
+    "test": "npm run format:check && npm run compile && node scripts/run-tests.cjs",
+    "vscode:prepublish": "npm run compile"
+  },
+  "devDependencies": {
+    "@types/node": "20.14.8",
+    "@types/vscode": "1.90.0",
+    "husky": "^9.1.7",
+    "prettier": "^3.8.4",
+    "typescript": "^5.8.3"
+  }
+}
