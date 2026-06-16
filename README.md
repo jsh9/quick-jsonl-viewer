@@ -4,14 +4,14 @@ Quick JSONL Viewer opens `.jsonl` files in a readonly, formatted VS Code custom 
 
 ## 1. Features
 
-- Open `.jsonl` files in a readonly custom editor with Pretty print, Wrapped raw, and Raw line modes.
+- Open `.jsonl` files in a readonly custom editor with Pretty print, Raw (wrapped), and Raw (unwrapped) modes.
 - See useful file context, including file size, total lines, and last modified time.
 - Keep large files responsive with configurable preview limits and indexed virtual rendering.
 
 Screenshot placeholders:
 
 - `images/screenshots/pretty-print.png`: Pretty print view showing formatted JSONL rows and file metadata.
-- `images/screenshots/raw-line.png`: Raw line or Wrapped raw view showing unformatted JSONL content in the custom viewer.
+- `images/screenshots/raw-views.png`: Raw (wrapped) and Raw (unwrapped) views showing unformatted JSONL content in the custom viewer.
 - `images/screenshots/indexed-large-file.png`: Large-file indexed mode showing responsive scrolling through a full JSONL file.
 
 ## 2. Usage
@@ -29,7 +29,7 @@ You can also run `Quick JSONL Viewer: Open in Quick JSONL Viewer` from the comma
 
 ## 4. Indexed Mode
 
-When `quickJsonlViewer.maxLines` is `0` or a large positive preview count, Quick JSONL Viewer does not send the whole file to the webview for Pretty print, Wrapped raw, or Raw line. It builds a byte-offset line index with progress, then the webview requests only the visible row range while scrolling. This keeps DOM size bounded for very large files.
+When `quickJsonlViewer.maxLines` is `0` or a large positive preview count, Quick JSONL Viewer does not send the whole file to the webview for Pretty print, Raw (wrapped), or Raw (unwrapped). It builds a byte-offset line index with progress, then the webview requests only the visible row range while scrolling. This keeps DOM size bounded for very large files.
 
 ## 5. Raw Contents
 
