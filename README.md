@@ -6,6 +6,7 @@ Quick JSONL Viewer opens `.jsonl` files in a readonly, formatted VS Code custom 
 
 - Open `.jsonl` files in a readonly custom editor with Pretty print, Raw (wrapped), and Raw (unwrapped) modes.
 - See useful file context, including file size, total lines, and last modified time.
+- Search rendered JSONL rows with VS Code's webview Find widget.
 - Keep large files responsive with configurable preview limits and indexed virtual rendering.
 
 ## 2. Screenshots
@@ -31,6 +32,8 @@ Quick JSONL Viewer opens `.jsonl` files in a readonly, formatted VS Code custom 
 Open any `.jsonl` file in VS Code and Quick JSONL Viewer opens it with the custom viewer by default.
 
 You can also run `Quick JSONL Viewer: Open in Quick JSONL Viewer` from the command palette, the editor title menu, or the Explorer context menu for a `.jsonl` file.
+
+Use `Ctrl+F` on Windows/Linux or `Cmd+F` on macOS to search text in the rendered viewer contents. In indexed virtual views, Find searches the rows currently rendered by the viewport plus the viewer's small overscan buffer; scroll to search another range.
 
 ## 4. Settings
 

@@ -55,6 +55,7 @@ export function activate(context: vscode.ExtensionContext): void {
       {
         supportsMultipleEditorsPerDocument: true,
         webviewOptions: {
+          enableFindWidget: true,
           retainContextWhenHidden: true
         }
       }

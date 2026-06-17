@@ -7,6 +7,15 @@ async function readExtensionSource(): Promise<string> {
   return fs.readFile(path.join(process.cwd(), 'src', 'extension.ts'), 'utf8');
 }
 
+test('custom editor enables the VS Code find widget for webview search', async () => {
+  const source = await readExtensionSource();
+
+  assert.match(
+    source,
+    /webviewOptions: \{[\s\S]*?enableFindWidget: true,[\s\S]*?retainContextWhenHidden: true/
+  );
+});
+
 test('webview top bar labels use colons, separators, and Show rows wording', async () => {
   const source = await readExtensionSource();
 

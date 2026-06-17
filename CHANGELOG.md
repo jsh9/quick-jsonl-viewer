@@ -2,6 +2,10 @@
 
 All notable changes to Quick JSONL Viewer are documented in this file.
 
+## 0.0.2
+
+- Enable VS Code's webview Find widget for searching rendered JSONL viewer rows.
+
 ## 0.0.1
 
 - Initial release of Quick JSONL Viewer.
