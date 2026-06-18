@@ -16,6 +16,17 @@ test('custom editor enables the VS Code find widget for webview search', async (
   );
 });
 
+test('custom editor focuses the webview so find shortcuts work after open', async () => {
+  const source = await readExtensionSource();
+
+  assert.match(
+    source,
+    /webviewPanel\.webview\.html = getHtml\(path\.basename\(document\.uri\.fsPath\)\);\s*webviewPanel\.reveal\(webviewPanel\.viewColumn, false\);/
+  );
+  assert.match(source, /<main id="content" tabindex="-1">/);
+  assert.match(source, /content\.focus\(\{ preventScroll: true \}\);/);
+});
+
 test('webview top bar labels use colons, separators, and Show rows wording', async () => {
   const source = await readExtensionSource();
 

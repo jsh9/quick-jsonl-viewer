@@ -157,6 +157,7 @@ class JsonlViewerProvider implements vscode.CustomReadonlyEditorProvider<JsonlDo
       enableScripts: true
     };
     webviewPanel.webview.html = getHtml(path.basename(document.uri.fsPath));
+    webviewPanel.reveal(webviewPanel.viewColumn, false);
 
     const disposables: vscode.Disposable[] = [];
     let generation = 0;
@@ -1151,7 +1152,7 @@ function getHtml(fileName: string): string {
       </div>
     </div>
   </header>
-  <main id="content">
+  <main id="content" tabindex="-1">
     <p class="status">Loading JSONL preview...</p>
   </main>
   <script nonce="${nonce}">
@@ -1193,6 +1194,8 @@ function getHtml(fileName: string): string {
     let measuredRowHeights = new Map();
     let currentVirtualStart = 0;
     let currentVirtualTotalRows = 0;
+
+    content.focus({ preventScroll: true });
 
     for (const button of modeButtons) {
       button.addEventListener('click', () => {
