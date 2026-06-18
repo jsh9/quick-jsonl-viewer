@@ -2,6 +2,10 @@
 
 All notable changes to Quick JSONL Viewer are documented in this file.
 
+## 0.0.3
+
+- Focus the JSONL viewer when it opens so VS Code's webview Find shortcut works without first clicking inside the editor.
+
 ## 0.0.2
 
 - Enable VS Code's webview Find widget for searching rendered JSONL viewer rows.
