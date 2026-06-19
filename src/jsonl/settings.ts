@@ -1,6 +1,8 @@
+import { INDEXED_PREVIEW_LINE_THRESHOLD } from '../shared/jsonlConstants';
+
 export const DEFAULT_MAX_LINES = 20;
 export const DEFAULT_INDENT = 2;
-export const INDEXED_PREVIEW_LINE_THRESHOLD = 200;
+export { INDEXED_PREVIEW_LINE_THRESHOLD } from '../shared/jsonlConstants';
 
 export interface ViewerSettings {
   readonly maxLines: number;

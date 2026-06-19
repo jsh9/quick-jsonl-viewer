@@ -1,0 +1,14 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "module": "ESNext",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "types": []
+  },
+  "include": [
+    "src/shared/**/*.ts",
+    "src/webview/app/**/*.ts",
+    "src/webview/lib/**/*.ts"
+  ],
+  "exclude": ["node_modules", "out"]
+}

@@ -12,7 +12,18 @@ const SOURCE_FILES = [
   'src/viewerProtocol.ts',
   'src/webview/html.ts',
   'src/webview/styles.ts',
-  'src/webview/script.ts'
+  'src/webview/script.ts',
+  'src/shared/jsonlConstants.ts',
+  'src/webview/app/main.ts',
+  'src/webview/app/app.ts',
+  'src/webview/app/dom.ts',
+  'src/webview/app/render.ts',
+  'src/webview/app/sourceContracts.ts',
+  'src/webview/lib/format.ts',
+  'src/webview/lib/highlight.ts',
+  'src/webview/lib/protocol.ts',
+  'src/webview/lib/virtualScroll.ts',
+  'out/webview/main.js'
 ];
 
 async function readExtensionSource(): Promise<string> {
