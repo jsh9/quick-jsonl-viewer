@@ -788,7 +788,8 @@ function getHtml(fileName: string): string {
   const nonce = getNonce();
   const escapedTitle = escapeHtml(fileName);
 
-  return /* html */ `<!DOCTYPE html>
+  /* c8 ignore start -- Embedded webview browser code is covered by source-contract tests until it is split into executable modules. */
+  const html = /* html */ `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
@@ -2253,6 +2254,8 @@ function getHtml(fileName: string): string {
   </script>
 </body>
 </html>`;
+  /* c8 ignore stop */
+  return html;
 }
 
 function getNonce(): string {

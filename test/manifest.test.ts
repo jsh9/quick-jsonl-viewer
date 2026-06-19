@@ -97,7 +97,19 @@ test('package wires local test hooks, formatting, and GitHub Actions test workfl
 
   assert.equal(
     packageJson.scripts?.['test'],
-    'npm run format:check && npm run compile && node scripts/run-tests.cjs'
+    'npm run format:check && npm run compile && npm run test:coverage'
+  );
+  assert.equal(
+    packageJson.scripts?.['test:unit'],
+    'node scripts/run-tests.cjs'
+  );
+  assert.equal(
+    packageJson.scripts?.['test:coverage'],
+    "c8 --all --src out/src --include 'out/src/**/*.js' --check-coverage --lines 95 --branches 95 --functions 95 npm run test:unit"
+  );
+  assert.equal(
+    packageJson.scripts?.['test:vscode'],
+    'npm run compile && vscode-test'
   );
   assert.equal(
     packageJson.scripts?.['format'],
@@ -109,7 +121,18 @@ test('package wires local test hooks, formatting, and GitHub Actions test workfl
   );
   assert.equal(packageJson.scripts?.['hooks:install'], undefined);
   assert.equal(packageJson.scripts?.['prepare'], 'husky');
+  assert.equal(
+    typeof packageJson.devDependencies?.['@vscode/test-cli'],
+    'string'
+  );
+  assert.equal(
+    typeof packageJson.devDependencies?.['@vscode/test-electron'],
+    'string'
+  );
+  assert.equal(typeof packageJson.devDependencies?.['@types/mocha'], 'string');
+  assert.equal(typeof packageJson.devDependencies?.['c8'], 'string');
   assert.equal(typeof packageJson.devDependencies?.['husky'], 'string');
+  assert.equal(typeof packageJson.devDependencies?.['mocha'], 'string');
   assert.equal(typeof packageJson.devDependencies?.['prettier'], 'string');
 
   const preCommitHook = await fs.readFile(
@@ -131,4 +154,5 @@ test('package wires local test hooks, formatting, and GitHub Actions test workfl
   assert.match(workflow, /HUSKY: 0/);
   assert.match(workflow, /npm ci/);
   assert.match(workflow, /npm test/);
+  assert.match(workflow, /xvfb-run -a npm run test:vscode/);
 });

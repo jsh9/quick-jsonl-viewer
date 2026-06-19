@@ -11,8 +11,8 @@
     "noFallthroughCasesInSwitch": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
-    "types": ["node", "vscode"]
+    "types": ["node", "vscode", "mocha"]
   },
-  "include": ["src", "test"],
+  "include": ["src", "test", "test-vscode"],
   "exclude": ["node_modules", "out"]
 }

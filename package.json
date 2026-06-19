@@ -130,14 +130,22 @@
     "format": "prettier . --write --ignore-unknown",
     "format:check": "prettier . --check --ignore-unknown",
     "prepare": "husky",
+    "test": "npm run format:check && npm run compile && npm run test:coverage",
+    "test:coverage": "c8 --all --src out/src --include 'out/src/**/*.js' --check-coverage --lines 95 --branches 95 --functions 95 npm run test:unit",
+    "test:unit": "node scripts/run-tests.cjs",
+    "test:vscode": "npm run compile && vscode-test",
     "watch": "tsc -watch -p ./",
-    "test": "npm run format:check && npm run compile && node scripts/run-tests.cjs",
     "vscode:prepublish": "npm run compile"
   },
   "devDependencies": {
+    "@types/mocha": "^10.0.10",
     "@types/node": "20.14.8",
     "@types/vscode": "1.90.0",
+    "@vscode/test-cli": "^0.0.12",
+    "@vscode/test-electron": "^3.0.0",
+    "c8": "^11.0.0",
     "husky": "^9.1.7",
+    "mocha": "^11.7.6",
     "prettier": "^3.8.4",
     "typescript": "^5.8.3"
   }

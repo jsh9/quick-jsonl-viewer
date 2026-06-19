@@ -6,7 +6,10 @@ sample-data/**
 scripts/**
 src/**
 test/**
+test-vscode/**
 node_modules/**
+.vscode-test.cjs
+.vscode-test/**
 images/icon-source.png
 *.vsix
 *.tsbuildinfo

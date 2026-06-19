@@ -28,3 +28,6 @@ jobs:
 
       - name: Run tests
         run: npm test
+
+      - name: Run VS Code smoke tests
+        run: xvfb-run -a npm run test:vscode

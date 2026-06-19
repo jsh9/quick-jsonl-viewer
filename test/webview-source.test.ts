@@ -305,3 +305,110 @@ test('virtual scrolling keeps non-scrollable offsets inside logical height', asy
     /if \(logicalMax === 0 \|\| physicalMax === 0\) \{\s*return Math\.max\(0, Math\.min\(logicalHeight, scrollOffset\)\);\s*\}/
   );
 });
+
+test('webview HTML uses nonce-based CSP and escapes the document title', async () => {
+  const source = await readExtensionSource();
+
+  assert.match(source, /const nonce = getNonce\(\);/);
+  assert.match(source, /const escapedTitle = escapeHtml\(fileName\);/);
+  assert.match(
+    source,
+    /Content-Security-Policy" content="default-src 'none'; style-src 'nonce-\$\{nonce\}'; script-src 'nonce-\$\{nonce\}';"/
+  );
+  assert.match(source, /<title>\$\{escapedTitle\}<\/title>/);
+  assert.match(source, /<style nonce="\$\{nonce\}">/);
+  assert.match(source, /<script nonce="\$\{nonce\}">/);
+  assert.match(source, /function escapeHtml\(value: string\): string \{/);
+});
+
+test('webview avoids unsafe HTML injection APIs', async () => {
+  const source = await readExtensionSource();
+  const webviewSource = source.slice(source.indexOf('function getHtml'));
+
+  assert.doesNotMatch(webviewSource, /\.innerHTML\s*=/);
+  assert.doesNotMatch(webviewSource, /insertAdjacentHTML/);
+  assert.doesNotMatch(webviewSource, /document\.write/);
+  assert.match(webviewSource, /textContent =/);
+  assert.match(webviewSource, /document\.createTextNode\(text\)/);
+});
+
+test('webview handles the expected extension message protocol', async () => {
+  const source = await readExtensionSource();
+
+  for (const messageType of [
+    'loading',
+    'data',
+    'lineCount',
+    'lineCountProgress',
+    'lineCountError',
+    'maxLinesError',
+    'previewLoadStart',
+    'previewLoadProgress',
+    'fullIndexStart',
+    'fullIndexProgress',
+    'fullIndexReady',
+    'fullIndexCancelled',
+    'rows',
+    'error'
+  ]) {
+    assert.match(source, new RegExp(`message\\.type === '${messageType}'`));
+  }
+
+  for (const postedType of [
+    'ready',
+    'rawContents',
+    'cancelIndex',
+    'fetchRows',
+    'updateMaxLines'
+  ]) {
+    assert.match(source, new RegExp(`type: '${postedType}'`));
+  }
+});
+
+test('webview rejects stale row responses before rendering virtual rows', async () => {
+  const source = await readExtensionSource();
+
+  assert.match(source, /let pendingRequestId = '';/);
+  assert.match(source, /pendingRequestId = requestId;/);
+  assert.match(
+    source,
+    /if \(message\.requestId !== pendingRequestId \|\| viewState !== 'fullReady'\) \{[\s\S]*?return;[\s\S]*?\}/
+  );
+  assert.match(
+    source,
+    /renderVirtualRows\(message\.payload\.start, message\.payload\.entries, message\.payload\.totalLines, message\.mode\);/
+  );
+});
+
+test('webview rows input validates, de-duplicates, and posts numeric updates', async () => {
+  const source = await readExtensionSource();
+
+  assert.match(source, /rowsInput\.addEventListener\('keydown'/);
+  assert.match(source, /rowsInput\.addEventListener\('blur'/);
+  assert.match(source, /rowsInput\.addEventListener\('input'/);
+  assert.match(source, /const value = Number\(rawValue\);/);
+  assert.match(source, /!Number\.isInteger\(value\) \|\| value < 0/);
+  assert.match(source, /if \(nextValue === lastSubmittedMaxLines\) \{/);
+  assert.match(
+    source,
+    /vscode\.postMessage\(\{[\s\S]*?type: 'updateMaxLines',[\s\S]*?value[\s\S]*?\}\);/
+  );
+});
+
+test('webview exposes all render modes and preserves virtual-scroll helpers', async () => {
+  const source = await readExtensionSource();
+
+  assert.match(source, /data-mode="pretty"/);
+  assert.match(source, /data-mode="wrappedRaw"/);
+  assert.match(source, /data-mode="rawLine"/);
+  assert.match(source, /id="raw-contents"/);
+  assert.match(source, /function renderLimitedVirtualViewer\(\) \{/);
+  assert.match(source, /function renderFullViewer\(\) \{/);
+  assert.match(source, /function requestVisibleRows\(\) \{/);
+  assert.match(source, /function requestLimitedVisibleRows\(\) \{/);
+  assert.match(
+    source,
+    /function renderVirtualRows\(start, entries, totalRows, rowMode\) \{/
+  );
+  assert.match(source, /function measureRenderedRows\(rowMode = mode\) \{/);
+});

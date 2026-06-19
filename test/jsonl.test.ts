@@ -7,8 +7,10 @@ import {
   DEFAULT_INDENT,
   DEFAULT_MAX_LINES,
   INDEXED_PREVIEW_LINE_THRESHOLD,
+  JsonlOperationCancelledError,
   countJsonlLines,
   fetchJsonlRows,
+  formatFileSize,
   formatJsonlLine,
   getDisplayRowCount,
   indexJsonlFile,
@@ -390,6 +392,256 @@ test('large positive row counts use indexed preview and clamp to total lines', (
   assert.equal(getDisplayRowCount(200_000, 0), 200_000);
   assert.equal(getDisplayRowCount(200_000, 1_000), 1_000);
   assert.equal(getDisplayRowCount(200_000, 10_000_000), 200_000);
+});
+
+test('empty files produce empty previews, counts, and indexes', async () => {
+  const filePath = await writeFixture('empty-paths.jsonl', '');
+  const countProgress: Array<{ percent: number; lineCount: number }> = [];
+  const indexProgress: Array<{
+    percent: number;
+    indexedLineCount: number;
+  }> = [];
+
+  const preview = await readJsonlPreview(filePath, {
+    maxLines: 20,
+    indent: 2
+  });
+  const lineCount = await countJsonlLines(filePath, {
+    onProgress: (event) => countProgress.push(event)
+  });
+  const index = await indexJsonlFile(filePath, {
+    onProgress: (event) => indexProgress.push(event)
+  });
+
+  assert.deepEqual(preview, {
+    entries: [],
+    plainText: '',
+    loadedLineCount: 0,
+    displayLimit: 20
+  });
+  assert.equal(lineCount, 0);
+  assert.deepEqual(index, {
+    fileSize: 0,
+    lineOffsets: [],
+    indexedLineCount: 0,
+    indexedEndOffset: 0,
+    isComplete: true
+  });
+  assert.equal(countProgress.at(-1)?.percent, 100);
+  assert.equal(countProgress.at(-1)?.lineCount, 0);
+  assert.equal(indexProgress.at(-1)?.percent, 100);
+  assert.equal(indexProgress.at(-1)?.indexedLineCount, 0);
+});
+
+test('lineLimit 0 returns an intentionally empty incomplete index', async () => {
+  const filePath = await writeFixture('zero-limit.jsonl', '{"a":1}\n{"b":2}');
+  const progress: Array<{ bytesRead: number; indexedLineCount: number }> = [];
+
+  const index = await indexJsonlFile(filePath, {
+    lineLimit: 0,
+    onProgress: (event) => progress.push(event)
+  });
+
+  assert.equal(index.fileSize, Buffer.byteLength('{"a":1}\n{"b":2}'));
+  assert.deepEqual(index.lineOffsets, []);
+  assert.equal(index.indexedLineCount, 0);
+  assert.equal(index.indexedEndOffset, 0);
+  assert.equal(index.isComplete, false);
+  assert.deepEqual(progress, [
+    {
+      bytesRead: 0,
+      totalBytes: index.fileSize,
+      percent: 0,
+      indexedLineCount: 0
+    }
+  ]);
+});
+
+test('range fetching strips CRLF carriage returns', async () => {
+  const filePath = await writeFixture('crlf.jsonl', '{"a":1}\r\n{"b":2}\r\n');
+  const index = await indexJsonlFile(filePath, { chunkSize: 4 });
+
+  const rows = await fetchJsonlRows(filePath, index, {
+    start: 0,
+    count: 2,
+    indent: 2
+  });
+
+  assert.equal(rows.entries.length, 2);
+  assert.equal(rows.entries[0]?.raw, '{"a":1}');
+  assert.equal(rows.entries[1]?.raw, '{"b":2}');
+});
+
+test('indexing and fetching preserve multibyte UTF-8 line offsets', async () => {
+  const first = JSON.stringify({ text: 'é', index: 1 });
+  const second = JSON.stringify({ text: '東京', index: 2 });
+  const contents = `${first}\n${second}`;
+  const filePath = await writeFixture('unicode.jsonl', contents);
+
+  const index = await indexJsonlFile(filePath, { chunkSize: 5 });
+  const rows = await fetchJsonlRows(filePath, index, {
+    start: 1,
+    count: 1,
+    indent: 2
+  });
+
+  assert.deepEqual(index.lineOffsets, [0, Buffer.byteLength(`${first}\n`)]);
+  assert.equal(index.fileSize, Buffer.byteLength(contents));
+  assert.equal(rows.entries[0]?.raw, second);
+});
+
+test('fetchJsonlRows clamps unusual ranges and handles empty byte ranges', async () => {
+  const filePath = await writeFixture('range-edges.jsonl', '{"a":1}\n{"b":2}');
+  const index = await indexJsonlFile(filePath);
+
+  assert.equal(
+    (
+      await fetchJsonlRows(filePath, index, {
+        start: 0,
+        count: 0,
+        indent: 2
+      })
+    ).entries.length,
+    0
+  );
+  assert.equal(
+    (
+      await fetchJsonlRows(filePath, index, {
+        start: -10,
+        count: -1,
+        indent: 2
+      })
+    ).entries.length,
+    0
+  );
+  assert.equal(
+    (
+      await fetchJsonlRows(filePath, index, {
+        start: Number.NaN,
+        count: Number.NaN,
+        indent: 2
+      })
+    ).entries.length,
+    0
+  );
+
+  const fractional = await fetchJsonlRows(filePath, index, {
+    start: 0.9,
+    count: 1.9,
+    indent: 2
+  });
+  assert.equal(fractional.start, 0);
+  assert.equal(fractional.entries.length, 1);
+  assert.equal(fractional.entries[0]?.raw, '{"a":1}');
+
+  const malformed = await fetchJsonlRows(
+    filePath,
+    {
+      fileSize: 10,
+      lineOffsets: [8],
+      indexedLineCount: 1,
+      indexedEndOffset: 4,
+      isComplete: false
+    },
+    {
+      start: 0,
+      count: 1,
+      indent: 2
+    }
+  );
+  assert.deepEqual(malformed.entries, []);
+});
+
+test('helpers classify abort errors and format file sizes', () => {
+  assert.equal(isAbortError(new JsonlOperationCancelledError()), true);
+  assert.equal(
+    isAbortError(
+      Object.assign(new Error('native abort'), { name: 'AbortError' })
+    ),
+    true
+  );
+  assert.equal(isAbortError(new Error('not abort')), false);
+  assert.equal(isAbortError('AbortError'), false);
+
+  assert.equal(formatFileSize(Number.NaN), '0 B');
+  assert.equal(formatFileSize(-1), '0 B');
+  assert.equal(formatFileSize(0), '0 B');
+  assert.equal(formatFileSize(999), '999 B');
+  assert.equal(formatFileSize(1024), '1.00 KB');
+  assert.equal(formatFileSize(10 * 1024), '10.0 KB');
+  assert.equal(formatFileSize(1024 ** 2), '1.00 MB');
+  assert.equal(formatFileSize(1024 ** 5), '1024.0 TB');
+});
+
+test('missing files reject from preview, count, index, and row fetch paths', async () => {
+  const missingPath = path.join(tempDir, 'missing.jsonl');
+
+  await assert.rejects(
+    readJsonlPreview(missingPath, { maxLines: 1, indent: 2 }),
+    /ENOENT/
+  );
+  await assert.rejects(countJsonlLines(missingPath), /ENOENT/);
+  await assert.rejects(indexJsonlFile(missingPath), /ENOENT/);
+  await assert.rejects(
+    fetchJsonlRows(
+      missingPath,
+      {
+        fileSize: 1,
+        lineOffsets: [0],
+        indexedLineCount: 1,
+        indexedEndOffset: 1,
+        isComplete: true
+      },
+      {
+        start: 0,
+        count: 1,
+        indent: 2
+      }
+    ),
+    /ENOENT/
+  );
+});
+
+test('progress callbacks can be omitted or throttled while final events are forced', async () => {
+  const filePath = await writeFixture(
+    'throttled-progress.jsonl',
+    '{"a":1}\n{"b":2}'
+  );
+  const previewProgress: Array<{ loadedLineCount: number; percent: number }> =
+    [];
+  const countProgress: Array<{ bytesRead: number; percent: number }> = [];
+  const indexProgress: Array<{ bytesRead: number; percent: number }> = [];
+
+  await readJsonlPreview(filePath, { maxLines: 2, indent: 2 });
+  await countJsonlLines(filePath);
+  await indexJsonlFile(filePath);
+
+  await readJsonlPreview(
+    filePath,
+    { maxLines: 2, indent: 2 },
+    {
+      progressIntervalMs: 60_000,
+      onProgress: (event) => previewProgress.push(event)
+    }
+  );
+  await countJsonlLines(filePath, {
+    progressIntervalMs: 60_000,
+    onProgress: (event) => countProgress.push(event)
+  });
+  await indexJsonlFile(filePath, {
+    progressIntervalMs: 60_000,
+    onProgress: (event) => indexProgress.push(event)
+  });
+
+  assert.deepEqual(
+    previewProgress.map((event) => event.loadedLineCount),
+    [0, 2]
+  );
+  assert.equal(previewProgress.at(-1)?.percent, 100);
+  assert.equal(countProgress[0]?.bytesRead, 0);
+  assert.equal(countProgress.at(-1)?.percent, 100);
+  assert.equal(indexProgress[0]?.bytesRead, 0);
+  assert.equal(indexProgress.at(-1)?.percent, 100);
 });
 
 async function writeFixture(
