@@ -1299,6 +1299,24 @@ function getCommand(
   return async (...args: unknown[]) => callback(...args);
 }
 
+const EXTENSION_MODULE_PATHS = [
+  '../src/extension',
+  '../src/constants',
+  '../src/commands',
+  '../src/viewerProvider',
+  '../src/viewerData',
+  '../src/viewerProtocol',
+  '../src/webview/html',
+  '../src/webview/script',
+  '../src/webview/styles'
+];
+
+function clearExtensionModuleCache(): void {
+  for (const modulePath of EXTENSION_MODULE_PATHS) {
+    delete require.cache[require.resolve(modulePath)];
+  }
+}
+
 function loadExtension(
   jsonlOverrides: Record<string, unknown> = {},
   nodeFsOverrides: Record<string, unknown> = {}
@@ -1344,9 +1362,8 @@ function loadExtension(
     return originalLoad.call(this, request, parent, isMain);
   };
 
-  const extensionPath = '../src/extension';
-  delete require.cache[require.resolve(extensionPath)];
-  const extension = require(extensionPath) as {
+  clearExtensionModuleCache();
+  const extension = require('../src/extension') as {
     activate(context: unknown): void;
     deactivate(): void;
   };
@@ -1356,7 +1373,7 @@ function loadExtension(
     extension,
     restore: () => {
       loader._load = originalLoad;
-      delete require.cache[require.resolve(extensionPath)];
+      clearExtensionModuleCache();
     }
   };
 }

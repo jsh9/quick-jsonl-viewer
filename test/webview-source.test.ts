@@ -3,8 +3,26 @@ import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import { test } from 'node:test';
 
+const SOURCE_FILES = [
+  'src/extension.ts',
+  'src/constants.ts',
+  'src/commands.ts',
+  'src/viewerProvider.ts',
+  'src/viewerData.ts',
+  'src/viewerProtocol.ts',
+  'src/webview/html.ts',
+  'src/webview/styles.ts',
+  'src/webview/script.ts'
+];
+
 async function readExtensionSource(): Promise<string> {
-  return fs.readFile(path.join(process.cwd(), 'src', 'extension.ts'), 'utf8');
+  const sources = await Promise.all(
+    SOURCE_FILES.map((sourceFile) =>
+      fs.readFile(path.join(process.cwd(), sourceFile), 'utf8')
+    )
+  );
+
+  return sources.join('\n');
 }
 
 test('custom editor enables the VS Code find widget for webview search', async () => {
@@ -197,7 +215,7 @@ test('file snapshot changes invalidate exact line counts', async () => {
   );
   assert.match(
     source,
-    /function isSameFileSnapshot\(left: FileSnapshot, right: FileSnapshot\): boolean \{[\s\S]*?left\.size === right\.size && left\.mtimeMs === right\.mtimeMs/
+    /function isSameFileSnapshot\(\s*left: FileSnapshot,\s*right: FileSnapshot\s*\): boolean \{[\s\S]*?left\.size === right\.size && left\.mtimeMs === right\.mtimeMs/
   );
   assert.match(
     source,
