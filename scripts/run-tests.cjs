@@ -33,12 +33,18 @@ if (!fs.existsSync(testRoot)) {
 }
 
 const testFiles = collectTestFiles(testRoot).sort();
-if (testFiles.length === 0) {
+const currentTestFiles = testFiles.filter((testFile) => {
+  const relativePath = path.relative(path.join(root, 'out'), testFile);
+  const sourcePath = path.join(root, relativePath).replace(/\.js$/, '.ts');
+  return fs.existsSync(sourcePath);
+});
+
+if (currentTestFiles.length === 0) {
   console.error(`No compiled test files found under: ${testRoot}`);
   process.exit(1);
 }
 
-const result = spawnSync(process.execPath, ['--test', ...testFiles], {
+const result = spawnSync(process.execPath, ['--test', ...currentTestFiles], {
   cwd: root,
   stdio: 'inherit'
 });
