@@ -64,11 +64,21 @@ test('maxLines set to 0 can still read all lines through the preview helper', as
       '\n'
     )
   );
+  const progress: Array<{ percent: number }> = [];
 
-  const preview = await readJsonlPreview(filePath, { maxLines: 0, indent: 2 });
+  const preview = await readJsonlPreview(
+    filePath,
+    { maxLines: 0, indent: 2 },
+    {
+      progressIntervalMs: 0,
+      onProgress: (event) => progress.push(event)
+    }
+  );
 
   assert.equal(preview.loadedLineCount, 25);
   assert.equal(preview.entries.length, 25);
   assert.equal(preview.entries[24]?.lineNumber, 25);
   assert.match(preview.plainText, /"index":24/);
+  assert.ok(progress.length >= 2);
+  assert.equal(progress.at(-1)?.percent, 0);
 });

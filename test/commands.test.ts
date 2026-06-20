@@ -120,6 +120,17 @@ test('command handlers report async open failures', async () => {
       harness.fake.errors[1],
       'Quick JSONL Viewer failed to open sample files: open failed'
     );
+
+    harness.fake.executeCommandError = 'string failure';
+    await getCommand(
+      harness.fake,
+      'quickJsonlViewer.openCurrentFile'
+    )(FakeUri.file(path.join(tempDir, 'string-failure.jsonl')));
+    await waitFor(() => harness.fake.errors.length === 3);
+    assert.equal(
+      harness.fake.errors[2],
+      'Quick JSONL Viewer failed to open the file: string failure'
+    );
   } finally {
     harness.restore();
   }

@@ -125,6 +125,12 @@ test('webview virtual scroll helpers cover empty rows, compression, and pruning 
   const small = new Map([[1, 50]]);
   pruneMeasuredRowHeights(small, 0, 1);
   assert.equal(small.size, 1);
+  (
+    pruneMeasuredRowHeights as unknown as (
+      measurements: Map<number, number>,
+      start: number
+    ) => void
+  )(small, 0);
 
   const large = new Map<number, number>();
   for (let index = 0; index < 1000; index += 1) {
@@ -133,6 +139,25 @@ test('webview virtual scroll helpers cover empty rows, compression, and pruning 
   pruneMeasuredRowHeights(large, 500, 1000);
   assert.ok(large.size <= MAX_MEASURED_ROW_HEIGHTS);
   assert.equal(large.has(0), false);
+
+  const allOutsideWindow = new Map<number, number>();
+  for (let index = 0; index < 600; index += 1) {
+    allOutsideWindow.set(index, 50);
+  }
+  pruneMeasuredRowHeights(allOutsideWindow, 10_000, 1);
+  assert.equal(allOutsideWindow.size, 0);
+
+  class NonDeletingMap extends Map<number, number> {
+    public override delete(_key: number): boolean {
+      return true;
+    }
+  }
+  const stubbornMeasurements = new NonDeletingMap();
+  for (let index = 0; index < 600; index += 1) {
+    stubbornMeasurements.set(index, 50);
+  }
+  pruneMeasuredRowHeights(stubbornMeasurements, 10_000, 1);
+  assert.equal(stubbornMeasurements.size, 600);
 
   resetVirtualMeasurements();
   for (let index = 0; index < 600; index += 1) {

@@ -306,3 +306,35 @@ test('fetchJsonlRows clamps unusual ranges and handles empty byte ranges', async
   );
   assert.deepEqual(malformed.entries, []);
 });
+
+test('full-file indexing accepts non-Buffer stream chunks', async () => {
+  const nodeFs = require('node:fs') as typeof import('node:fs');
+  const originalCreateReadStream = nodeFs.createReadStream;
+  const contents = '{"a":1}\n{"b":2}';
+  const filePath = await writeFixture('index-array-buffer.jsonl', contents);
+  const chunk = Uint8Array.from(Buffer.from(contents)).buffer;
+
+  nodeFs.createReadStream = (() =>
+    createAsyncStream([chunk])) as unknown as typeof nodeFs.createReadStream;
+  try {
+    const index = await indexJsonlFile(filePath);
+
+    assert.equal(index.indexedLineCount, 2);
+    assert.deepEqual(index.lineOffsets, [0, 8]);
+  } finally {
+    nodeFs.createReadStream = originalCreateReadStream;
+  }
+});
+
+function createAsyncStream(
+  chunks: readonly unknown[]
+): AsyncIterable<unknown> & { destroy(): void } {
+  return {
+    async *[Symbol.asyncIterator](): AsyncIterator<unknown> {
+      for (const chunk of chunks) {
+        yield chunk;
+      }
+    },
+    destroy: () => undefined
+  };
+}

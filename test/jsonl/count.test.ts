@@ -59,3 +59,63 @@ test('line counting can be cancelled', async () => {
     (error: unknown) => isAbortError(error)
   );
 });
+
+test('line counting accepts non-Buffer stream chunks', async () => {
+  const nodeFs = require('node:fs') as typeof import('node:fs');
+  const originalCreateReadStream = nodeFs.createReadStream;
+  const contents = '{"a":1}\n';
+  const filePath = await writeFixture('count-array-buffer.jsonl', contents);
+  const chunk = Uint8Array.from(Buffer.from(contents)).buffer;
+
+  nodeFs.createReadStream = (() =>
+    createAsyncStream([chunk])) as unknown as typeof nodeFs.createReadStream;
+  try {
+    assert.equal(await countJsonlLines(filePath), 1);
+  } finally {
+    nodeFs.createReadStream = originalCreateReadStream;
+  }
+});
+
+test('line counting tolerates a missing final byte from converted chunks', async () => {
+  const nodeFs = require('node:fs') as typeof import('node:fs');
+  const originalCreateReadStream = nodeFs.createReadStream;
+  const originalBufferFrom = Buffer.from;
+  const marker = new ArrayBuffer(1);
+  const filePath = await writeFixture('count-missing-final-byte.jsonl', 'x');
+
+  nodeFs.createReadStream = (() =>
+    createAsyncStream([marker])) as unknown as typeof nodeFs.createReadStream;
+  (Buffer as unknown as { from: typeof Buffer.from }).from = ((
+    value: unknown,
+    ...rest: unknown[]
+  ): Buffer => {
+    if (value === marker) {
+      return { length: 1 } as Buffer;
+    }
+
+    return (originalBufferFrom as unknown as (...args: unknown[]) => Buffer)(
+      value,
+      ...rest
+    );
+  }) as unknown as typeof Buffer.from;
+
+  try {
+    assert.equal(await countJsonlLines(filePath), 1);
+  } finally {
+    nodeFs.createReadStream = originalCreateReadStream;
+    Buffer.from = originalBufferFrom;
+  }
+});
+
+function createAsyncStream(
+  chunks: readonly unknown[]
+): AsyncIterable<unknown> & { destroy(): void } {
+  return {
+    async *[Symbol.asyncIterator](): AsyncIterator<unknown> {
+      for (const chunk of chunks) {
+        yield chunk;
+      }
+    },
+    destroy: () => undefined
+  };
+}

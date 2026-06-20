@@ -361,7 +361,8 @@ export function clearExtensionModuleCache(): void {
 
 export function loadExtension(
   jsonlOverrides: Record<string, unknown> = {},
-  nodeFsOverrides: Record<string, unknown> = {}
+  nodeFsOverrides: Record<string, unknown> = {},
+  nodeFsPromisesOverrides: Record<string, unknown> = {}
 ): {
   readonly fake: FakeVscode;
   readonly extension: {
@@ -373,6 +374,10 @@ export function loadExtension(
   const fake = new FakeVscode();
   const realJsonl = require('../../src/jsonl') as Record<string, unknown>;
   const realNodeFs = require('node:fs') as Record<string, unknown>;
+  const realNodeFsPromises = require('node:fs/promises') as Record<
+    string,
+    unknown
+  >;
   const loader = require('node:module') as {
     _load(request: string, parent: unknown, isMain: boolean): unknown;
   };
@@ -391,6 +396,16 @@ export function loadExtension(
       return {
         ...realNodeFs,
         ...nodeFsOverrides
+      };
+    }
+
+    if (
+      request === 'node:fs/promises' &&
+      Object.keys(nodeFsPromisesOverrides).length > 0
+    ) {
+      return {
+        ...realNodeFsPromises,
+        ...nodeFsPromisesOverrides
       };
     }
 

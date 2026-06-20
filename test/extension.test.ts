@@ -28,6 +28,7 @@ test('activate registers commands and the custom editor provider', () => {
         retainContextWhenHidden: true
       }
     });
+    harness.extension.deactivate();
   } finally {
     harness.restore();
   }

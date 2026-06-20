@@ -18,3 +18,19 @@ test('valid JSON lines are formatted with the configured indentation', () => {
   assert.match(entry.formatted, /\n {4}"a"/);
   assert.match(entry.formatted, /\n {8}"b"/);
 });
+
+test('invalid JSON lines stringify non-Error parse failures', () => {
+  const originalParse = JSON.parse;
+
+  JSON.parse = (() => {
+    throw 'parse failed';
+  }) as typeof JSON.parse;
+  try {
+    const entry = formatJsonlLine(1, '{"a":1}', 2);
+
+    assert.equal(entry.kind, 'error');
+    assert.equal(entry.error, 'parse failed');
+  } finally {
+    JSON.parse = originalParse;
+  }
+});

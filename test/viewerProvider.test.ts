@@ -47,6 +47,7 @@ test('custom editor posts limited preview data after the webview is ready', asyn
         .slice(0, 3),
       ['loading', 'previewLoadStart', 'previewLoadProgress']
     );
+    (document as unknown as { dispose(): void }).dispose();
   } finally {
     panel.dispose();
     harness.restore();
@@ -130,6 +131,17 @@ test('custom editor handles full indexing, row fetches, cancellation, and raw co
       (message) => message.type === 'rows' && message.requestId === 'rows-3'
     );
     assert.equal(wrappedRows.mode, 'wrappedRaw');
+
+    panel.webview.receive({
+      type: 'fetchRows',
+      start: 0,
+      count: 1
+    });
+    const anonymousRows = await waitForMessage<{
+      readonly type: string;
+      readonly requestId: string;
+    }>(panel, (message) => message.type === 'rows' && message.requestId === '');
+    assert.equal(anonymousRows.requestId, '');
 
     panel.webview.receive({ type: 'cancelIndex' });
     await waitForMessage(
@@ -260,6 +272,7 @@ test('custom editor reloads on settings and matching file saves', async () => {
 
     panel.webview.messages.length = 0;
     harness.fake.fireSave(uri);
+    harness.fake.fireSave(uri);
     await waitForMessage(panel, (message) => message.type === 'loading', 1_000);
 
     const listenerCount = harness.fake.saveListeners.length;
@@ -278,6 +291,7 @@ test('native file watcher filters events and disposes pending reloads', async ()
   let watchCallback:
     | ((_eventType: string, changedFileName?: string | Buffer) => void)
     | undefined;
+  let watchErrorCallback: (() => void) | undefined;
   let closeCalls = 0;
   const harness = loadExtension(
     {},
@@ -291,7 +305,11 @@ test('native file watcher filters events and disposes pending reloads', async ()
       ) => {
         watchCallback = callback;
         return {
-          on: () => undefined,
+          on: (eventName: string, listener: () => void) => {
+            if (eventName === 'error') {
+              watchErrorCallback = listener;
+            }
+          },
           close: () => {
             closeCalls += 1;
           }
@@ -307,6 +325,11 @@ test('native file watcher filters events and disposes pending reloads', async ()
     const document = await provider.openCustomDocument(uri);
     await provider.resolveCustomEditor(document, panel, {});
     assert.ok(watchCallback);
+    assert.ok(watchErrorCallback);
+    watchErrorCallback();
+
+    watchCallback?.('change');
+    assert.equal(panel.webview.messages.length, 0);
 
     watchCallback?.('change', path.basename(filePath));
     assert.equal(panel.webview.messages.length, 0);
@@ -394,6 +417,62 @@ test('custom editor reports unsupported schemes and missing files', async () => 
     assert.match(missingError.message, /ENOENT/);
     missingPanel.dispose();
   } finally {
+    harness.restore();
+  }
+});
+
+test('custom editor reports aborted preview loads as cancelled indexing', async () => {
+  const harness = loadExtension({
+    readJsonlPreview: async () => {
+      const error = new Error('aborted');
+      error.name = 'AbortError';
+      throw error;
+    }
+  });
+  const panel = new FakeWebviewPanel();
+  try {
+    const provider = activateAndGetProvider(harness);
+    const document = await provider.openCustomDocument(
+      FakeUri.file(await writeFixture('abort-preview.jsonl', '{"a":1}'))
+    );
+    await provider.resolveCustomEditor(document, panel, {});
+    panel.webview.receive({ type: 'ready' });
+    await waitForMessage(
+      panel,
+      (message) => message.type === 'fullIndexCancelled'
+    );
+  } finally {
+    panel.dispose();
+    harness.restore();
+  }
+});
+
+test('custom editor reports unexpected load failures from safeLoad', async () => {
+  const harness = loadExtension();
+  const panel = new FakeWebviewPanel();
+  const originalPostMessage = panel.webview.postMessage.bind(panel.webview);
+  try {
+    panel.webview.postMessage = async (message: unknown): Promise<boolean> => {
+      if (getMessageType(message) === 'loading') {
+        throw 'load failed';
+      }
+
+      return originalPostMessage(message);
+    };
+    const provider = activateAndGetProvider(harness);
+    const document = await provider.openCustomDocument(
+      FakeUri.file(await writeFixture('safe-load-fails.jsonl', '{"a":1}'))
+    );
+    await provider.resolveCustomEditor(document, panel, {});
+
+    panel.webview.receive({ type: 'ready' });
+    const error = await waitForMessage<{
+      readonly type?: unknown;
+      readonly message: string;
+    }>(panel, (message) => message.type === 'error');
+    assert.equal(error.message, 'load failed');
+  } finally {
+    panel.dispose();
     harness.restore();
   }
 });
@@ -665,6 +744,82 @@ test('incomplete indexed previews start exact line counting', async () => {
     await waitForMessage(panel, (message) => message.type === 'fullIndexReady');
     await waitFor(() => countCalls.length === 1);
     await waitForMessage(panel, (message) => message.type === 'lineCount');
+  } finally {
+    panel.dispose();
+    harness.restore();
+  }
+});
+
+test('exact line counting reuses matching in-flight and cached counts', async () => {
+  let resolveCount: ((lineCount: number) => void) | undefined;
+  const countCalls: string[] = [];
+  const contents = Array.from({ length: 201 }, (_, index) =>
+    JSON.stringify({ index })
+  ).join('\n');
+  const filePath = await writeFixture(
+    'indexed-preview-count-cache.jsonl',
+    contents
+  );
+  const uri = FakeUri.file(filePath);
+  const realNodeFsPromises =
+    require('node:fs/promises') as typeof import('node:fs/promises');
+  const fixedMtime = new Date('2026-01-01T00:00:00.000Z');
+  const harness = loadExtension(
+    {
+      countJsonlLines: async (filePath: string) => {
+        countCalls.push(filePath);
+        return new Promise<number>((resolve) => {
+          resolveCount = resolve;
+        });
+      }
+    },
+    {
+      watch: () => ({
+        on: () => undefined,
+        close: () => undefined
+      })
+    },
+    {
+      stat: async (target: unknown, ...args: unknown[]) => {
+        if (target === uri.fsPath) {
+          return {
+            size: Buffer.byteLength(contents),
+            mtime: fixedMtime,
+            mtimeMs: fixedMtime.getTime()
+          };
+        }
+
+        return realNodeFsPromises.stat(
+          target as Parameters<typeof realNodeFsPromises.stat>[0],
+          ...(args as [])
+        );
+      }
+    }
+  );
+  const panel = new FakeWebviewPanel();
+  try {
+    harness.fake.maxLines = 200;
+    const provider = activateAndGetProvider(harness);
+    const document = await provider.openCustomDocument(uri);
+    await provider.resolveCustomEditor(document, panel, {});
+    panel.webview.receive({ type: 'ready' });
+    await waitForMessage(panel, (message) => message.type === 'fullIndexReady');
+    await waitFor(() => countCalls.length === 1);
+
+    panel.webview.messages.length = 0;
+    harness.fake.fireConfigurationChange(['quickJsonlViewer.indent']);
+    await waitForMessage(panel, (message) => message.type === 'fullIndexReady');
+    await sleep(20);
+    assert.equal(countCalls.length, 1);
+
+    resolveCount?.(201);
+    await waitForMessage(panel, (message) => message.type === 'lineCount');
+
+    panel.webview.messages.length = 0;
+    harness.fake.fireConfigurationChange(['quickJsonlViewer.indent']);
+    await waitForMessage(panel, (message) => message.type === 'fullIndexReady');
+    await sleep(20);
+    assert.equal(countCalls.length, 1);
   } finally {
     panel.dispose();
     harness.restore();
