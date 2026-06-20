@@ -2,6 +2,14 @@
 
 All notable changes to Quick JSONL Viewer are documented in this file.
 
+## 0.0.5
+
+- Add installation and marketplace information to the README introduction.
+
+## 0.0.4
+
+- Refactor the JSONL viewer implementation and expand coverage across fallback paths.
+
 ## 0.0.3
 
 - Focus the JSONL viewer when it opens so VS Code's webview Find shortcut works without first clicking inside the editor.

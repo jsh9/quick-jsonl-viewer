@@ -1,6 +1,20 @@
 # Quick JSONL Viewer
 
-Quick JSONL Viewer opens `.jsonl` files in a readonly, formatted VS Code custom editor designed to stay responsive with large JSON Lines files.
+Quick JSONL Viewer is a VS Code extension that opens `.jsonl` files in a
+readonly, formatted custom editor designed to stay responsive with large JSON
+Lines files.
+
+You can also use it in IDEs that are based on VS Code (such as Cursor).
+
+To install it, simply search its name "Quick JSONL Viewer" in the "Extensions"
+side panel of VS Code (or Cursor, etc.).
+
+It is hosted both on VS Code marketplace and Open VSX:
+
+- Visual Studio Marketplace:
+  <https://marketplace.visualstudio.com/items?itemName=jsh9.quick-jsonl-viewer>
+- Open VSX:
+  <https://open-vsx.org/extension/jsh9/quick-jsonl-viewer>
 
 ## 1. Features
 
