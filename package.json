@@ -2,7 +2,7 @@
   "name": "quick-jsonl-viewer",
   "displayName": "Quick JSONL Viewer",
   "description": "View and preview large JSONL files in a readonly, formatted VS Code custom editor.",
-  "version": "0.0.5",
+  "version": "0.0.6",
   "publisher": "jsh9",
   "license": "MIT",
   "icon": "images/icon.png",

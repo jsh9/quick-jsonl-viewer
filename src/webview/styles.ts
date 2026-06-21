@@ -52,6 +52,10 @@ export function getWebviewStyles(): string {
       user-select: none;
     }
 
+    #preview-status:empty {
+      display: none;
+    }
+
     .info strong {
       color: var(--vscode-editor-foreground);
       font-weight: 600;

@@ -25,7 +25,7 @@ ${getWebviewStyles()}
       <label class="rows-control info-item"><strong>Show</strong> <input id="rows-input" class="rows-input" type="number" min="0" step="1" inputmode="numeric" aria-describedby="rows-error"> <span>rows</span></label>
       <span id="rows-error" class="rows-error" role="status"></span>
       <span class="info-item"><strong>Modified:</strong> <span id="modified">Loading...</span></span>
-      <span id="preview-status"></span>
+      <span id="preview-status" class="info-item"></span>
     </div>
     <div class="actions">
       <div class="mode-tabs" role="toolbar" aria-label="JSONL view mode">
