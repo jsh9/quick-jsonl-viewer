@@ -2,6 +2,10 @@
 
 All notable changes to Quick JSONL Viewer are documented in this file.
 
+## 0.0.6
+
+- Add an info-bar separator before the rendered preview status text.
+
 ## 0.0.5
 
 - Add installation and marketplace information to the README introduction.

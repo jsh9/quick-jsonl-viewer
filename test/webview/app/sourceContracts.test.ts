@@ -63,10 +63,12 @@ test('webview top bar labels use colons, separators, and Show rows wording', asy
   assert.match(source, /<strong>Total lines:<\/strong>/);
   assert.match(source, /<strong>Show<\/strong>[\s\S]*<span>rows<\/span>/);
   assert.match(source, /<strong>Modified:<\/strong>/);
+  assert.match(source, /<span id="preview-status" class="info-item"><\/span>/);
   assert.match(
     source,
     /\.info-item:not\(:first-child\)::before[\s\S]*content: "\|";/
   );
+  assert.match(source, /#preview-status:empty[\s\S]*display: none;/);
 });
 
 test('raw-line virtual rows stay unwrapped without fixed-height clipping', async () => {
