@@ -44,6 +44,12 @@ test('package contributes JSONL viewer as the default editor association', async
         readonly priority?: unknown;
         readonly selector?: Array<{ readonly filenamePattern?: unknown }>;
       }>;
+      readonly configuration?: {
+        readonly properties?: Record<
+          string,
+          { readonly type?: unknown; readonly default?: unknown }
+        >;
+      };
     };
   };
 
@@ -83,6 +89,17 @@ test('package contributes JSONL viewer as the default editor association', async
         Array.isArray(language.extensions) &&
         language.extensions.includes('.jsonl')
     )
+  );
+  assert.deepEqual(
+    packageJson.contributes?.configuration?.properties?.[
+      'quickJsonlViewer.autoRefresh'
+    ],
+    {
+      type: 'boolean',
+      default: true,
+      description:
+        'Automatically refresh open JSONL viewers when the underlying file changes. Disable to refresh manually from the viewer toolbar.'
+    }
   );
 });
 

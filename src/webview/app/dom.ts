@@ -1,6 +1,7 @@
 export interface WebviewElements {
   readonly content: HTMLElement;
   readonly modeButtons: HTMLButtonElement[];
+  readonly refreshButton: HTMLButtonElement;
   readonly rawContentsButton: HTMLButtonElement;
   readonly fileSize: HTMLElement;
   readonly lineCount: HTMLElement;
@@ -16,6 +17,7 @@ export function collectDomElements(): WebviewElements {
     modeButtons: Array.from(
       document.querySelectorAll<HTMLButtonElement>('[data-mode]')
     ),
+    refreshButton: getRequiredElement('refresh'),
     rawContentsButton: getRequiredElement('raw-contents'),
     fileSize: getRequiredElement('file-size'),
     lineCount: getRequiredElement('line-count'),
@@ -33,6 +35,7 @@ export function setControlsDisabled(
   for (const button of elements.modeButtons) {
     button.disabled = disabled;
   }
+  elements.refreshButton.disabled = disabled;
   elements.rawContentsButton.disabled = disabled;
   elements.rowsInput.disabled = disabled;
 }

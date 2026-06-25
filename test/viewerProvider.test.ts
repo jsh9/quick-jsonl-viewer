@@ -31,6 +31,7 @@ test('custom editor posts limited preview data after the webview is ready', asyn
     await provider.resolveCustomEditor(document, panel, {});
     assert.deepEqual(panel.webview.options, { enableScripts: true });
     assert.match(panel.webview.html, /preview &amp; value\.jsonl/);
+    assert.match(panel.webview.html, /id="refresh" hidden>Refresh/);
     assert.deepEqual(panel.revealCalls, [[FakeVscode.ViewColumn.One, false]]);
     assert.equal(panel.webview.messages.length, 0);
 
@@ -283,6 +284,114 @@ test('custom editor reloads on settings and matching file saves', async () => {
         .every((item) => item.disposed)
     );
   } finally {
+    panel.dispose();
+    harness.restore();
+  }
+});
+
+test('custom editor can disable automatic reloads and refresh manually', async () => {
+  let watchCallback:
+    | ((_eventType: string, changedFileName?: string | Buffer) => void)
+    | undefined;
+  const harness = loadExtension(
+    {},
+    {
+      watch: (
+        _directory: string,
+        callback: (
+          _eventType: string,
+          changedFileName?: string | Buffer
+        ) => void
+      ) => {
+        watchCallback = callback;
+        return {
+          on: () => undefined,
+          close: () => undefined
+        };
+      }
+    }
+  );
+  const filePath = await writeFixture('manual-refresh.jsonl', '{"a":1}');
+  const panel = new FakeWebviewPanel();
+  try {
+    harness.fake.autoRefresh = false;
+    const provider = activateAndGetProvider(harness);
+    const uri = FakeUri.file(filePath);
+    const document = await provider.openCustomDocument(uri);
+    await provider.resolveCustomEditor(document, panel, {});
+    assert.match(panel.webview.html, /id="refresh">Refresh/);
+    assert.doesNotMatch(panel.webview.html, /id="refresh" hidden/);
+    panel.webview.receive({ type: 'ready' });
+    const data = await waitForMessage<{
+      readonly type?: unknown;
+      readonly payload: { readonly autoRefresh: boolean };
+    }>(panel, (message) => message.type === 'data');
+    assert.equal(data.payload.autoRefresh, false);
+
+    panel.webview.messages.length = 0;
+    harness.fake.fireSave(uri);
+    watchCallback?.('change', path.basename(filePath));
+    await sleep(200);
+    assert.equal(
+      panel.webview.messages.some(
+        (message) => getMessageType(message) === 'loading'
+      ),
+      false
+    );
+
+    panel.webview.receive({ type: 'refresh' });
+    await waitForMessage(panel, (message) => message.type === 'loading');
+    await waitForMessage(panel, (message) => message.type === 'data');
+  } finally {
+    panel.dispose();
+    harness.restore();
+  }
+});
+
+test('auto-refresh setting changes update open viewers', async () => {
+  const harness = loadExtension();
+  const filePath = await writeFixture('toggle-auto-refresh.jsonl', '{"a":1}');
+  const panel = new FakeWebviewPanel();
+  try {
+    const provider = activateAndGetProvider(harness);
+    const uri = FakeUri.file(filePath);
+    const document = await provider.openCustomDocument(uri);
+    await provider.resolveCustomEditor(document, panel, {});
+    panel.webview.receive({ type: 'ready' });
+    await waitForMessage(panel, (message) => message.type === 'data');
+
+    panel.webview.messages.length = 0;
+    harness.fake.autoRefresh = false;
+    harness.fake.fireConfigurationChange(['quickJsonlViewer.autoRefresh']);
+    const disabledData = await waitForMessage<{
+      readonly type?: unknown;
+      readonly payload: { readonly autoRefresh: boolean };
+    }>(panel, (message) => message.type === 'data');
+    assert.equal(disabledData.payload.autoRefresh, false);
+
+    panel.webview.messages.length = 0;
+    harness.fake.fireSave(uri);
+    await sleep(200);
+    assert.equal(
+      panel.webview.messages.some(
+        (message) => getMessageType(message) === 'loading'
+      ),
+      false
+    );
+
+    harness.fake.autoRefresh = true;
+    harness.fake.fireConfigurationChange(['quickJsonlViewer.autoRefresh']);
+    const enabledData = await waitForMessage<{
+      readonly type?: unknown;
+      readonly payload: { readonly autoRefresh: boolean };
+    }>(panel, (message) => message.type === 'data');
+    assert.equal(enabledData.payload.autoRefresh, true);
+
+    panel.webview.messages.length = 0;
+    harness.fake.fireSave(uri);
+    await waitForMessage(panel, (message) => message.type === 'loading');
+  } finally {
+    panel.dispose();
     harness.restore();
   }
 });

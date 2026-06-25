@@ -16,7 +16,8 @@ export function getSettings(): ViewerSettings {
   const configuration = vscode.workspace.getConfiguration(SETTINGS_SECTION);
   return normalizeViewerSettings({
     maxLines: configuration.get('maxLines'),
-    indent: configuration.get('indent')
+    indent: configuration.get('indent'),
+    autoRefresh: configuration.get('autoRefresh')
   });
 }
 

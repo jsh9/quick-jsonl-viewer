@@ -50,7 +50,7 @@ test('custom editor focuses the webview so find shortcuts work after open', asyn
 
   assert.match(
     source,
-    /webviewPanel\.webview\.html = getHtml\(path\.basename\(document\.uri\.fsPath\)\);\s*webviewPanel\.reveal\(webviewPanel\.viewColumn, false\);/
+    /webviewPanel\.webview\.html = getHtml\(\s*path\.basename\(document\.uri\.fsPath\),\s*currentSettings\.autoRefresh\s*\);\s*webviewPanel\.reveal\(webviewPanel\.viewColumn, false\);/
   );
   assert.match(source, /<main id="content" tabindex="-1">/);
   assert.match(source, /content\.focus\(\{ preventScroll: true \}\);/);
@@ -158,8 +158,9 @@ test('open viewers reload when their file changes', async () => {
   );
   assert.match(
     source,
-    /if \(fileReloadTimer\) \{[\s\S]*?clearTimeout\(fileReloadTimer\);[\s\S]*?\}/
+    /const clearFileReloadTimer = \(\): void => \{[\s\S]*?clearTimeout\(fileReloadTimer\);[\s\S]*?fileReloadTimer = undefined;/
   );
+  assert.match(source, /clearFileReloadTimer\(\);/);
 });
 
 test('line count progress is posted and rendered', async () => {
@@ -388,6 +389,7 @@ test('webview handles the expected extension message protocol', async () => {
   for (const postedType of [
     'ready',
     'rawContents',
+    'refresh',
     'cancelIndex',
     'fetchRows',
     'updateMaxLines'
@@ -432,6 +434,14 @@ test('webview exposes all render modes and preserves virtual-scroll helpers', as
   assert.match(source, /data-mode="pretty"/);
   assert.match(source, /data-mode="wrappedRaw"/);
   assert.match(source, /data-mode="rawLine"/);
+  assert.match(
+    source,
+    /const refreshButtonHidden = autoRefresh \? ' hidden' : '';/
+  );
+  assert.match(
+    source,
+    /id="refresh"\$\{refreshButtonHidden\}>Refresh<\/button>/
+  );
   assert.match(source, /id="raw-contents"/);
   assert.match(source, /function renderLimitedVirtualViewer\(\) \{/);
   assert.match(source, /function renderFullViewer\(\) \{/);
@@ -442,4 +452,37 @@ test('webview exposes all render modes and preserves virtual-scroll helpers', as
     /function renderVirtualRows\(start, entries, totalRows, rowMode\) \{/
   );
   assert.match(source, /function measureRenderedRows\(rowMode = mode\) \{/);
+});
+
+test('manual refresh button is shown only when auto-refresh is disabled', async () => {
+  const source = await readExtensionSource();
+
+  assert.match(
+    source,
+    /refreshButton\.addEventListener\('click'[\s\S]*?type: 'refresh'/
+  );
+  assert.match(
+    source,
+    /function updateRefreshButton\(autoRefresh[\s\S]*?refreshButton\.hidden = autoRefresh;/
+  );
+  assert.match(
+    source,
+    /function enableRefreshWhenVisible\(\)[\s\S]*?refreshButton\.disabled = Boolean\(refreshButton\.hidden\);/
+  );
+  assert.match(
+    source,
+    /if \(message\.type === 'data'\) \{[\s\S]*?updateRefreshButton\(message\.payload\.autoRefresh\);/
+  );
+  assert.match(
+    source,
+    /if \(message\.type === 'previewLoadStart'\) \{[\s\S]*?updateRefreshButton\(message\.payload\.autoRefresh\);/
+  );
+  assert.match(
+    source,
+    /if \(message\.type === 'fullIndexStart'\) \{[\s\S]*?updateRefreshButton\(message\.payload\.autoRefresh\);/
+  );
+  assert.match(
+    source,
+    /if \(message\.type === 'fullIndexReady'\) \{[\s\S]*?updateRefreshButton\(message\.payload\.autoRefresh\);/
+  );
 });

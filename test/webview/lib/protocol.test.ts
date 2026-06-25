@@ -104,6 +104,7 @@ test('webview protocol constants list expected extension and webview message typ
   assert.deepEqual(WEBVIEW_POSTED_MESSAGE_TYPES, [
     'ready',
     'rawContents',
+    'refresh',
     'cancelIndex',
     'fetchRows',
     'updateMaxLines'

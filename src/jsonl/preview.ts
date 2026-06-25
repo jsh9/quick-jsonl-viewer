@@ -25,7 +25,7 @@ export interface ReadJsonlPreviewOptions {
 
 export async function readJsonlPreview(
   filePath: string,
-  settings: ViewerSettings,
+  settings: Pick<ViewerSettings, 'maxLines' | 'indent'>,
   options: ReadJsonlPreviewOptions = {}
 ): Promise<JsonlPreview> {
   throwIfAborted(options.signal);

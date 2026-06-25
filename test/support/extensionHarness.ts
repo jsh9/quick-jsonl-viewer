@@ -157,6 +157,7 @@ export class FakeVscode {
   public activeTabInput: unknown;
   public maxLines = 20;
   public indent = 2;
+  public autoRefresh = true;
   public executeCommandError: unknown;
   public configurationUpdateError: unknown;
 
@@ -194,6 +195,10 @@ export class FakeVscode {
               return this.indent;
             }
 
+            if (key === 'autoRefresh') {
+              return this.autoRefresh;
+            }
+
             return undefined;
           },
           update: async (
@@ -208,6 +213,10 @@ export class FakeVscode {
             this.configurationUpdates.push({ key, value, target });
             if (key === 'maxLines' && typeof value === 'number') {
               this.maxLines = value;
+            }
+
+            if (key === 'autoRefresh' && typeof value === 'boolean') {
+              this.autoRefresh = value;
             }
           }
         };

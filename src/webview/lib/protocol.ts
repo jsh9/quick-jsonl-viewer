@@ -21,6 +21,7 @@ export const EXTENSION_MESSAGE_TYPES = [
 export const WEBVIEW_POSTED_MESSAGE_TYPES = [
   'ready',
   'rawContents',
+  'refresh',
   'cancelIndex',
   'fetchRows',
   'updateMaxLines'
@@ -92,6 +93,7 @@ export interface JsonlMetadataPayload {
   lastModified: string;
   maxLines: number;
   indent: number;
+  autoRefresh: boolean;
 }
 
 export interface JsonlDataPayload extends JsonlMetadataPayload {
@@ -149,6 +151,7 @@ export type ExtensionMessage =
 export type WebviewPostMessage =
   | { type: 'ready' }
   | { type: 'rawContents' }
+  | { type: 'refresh' }
   | { type: 'cancelIndex' }
   | {
       type: 'fetchRows';

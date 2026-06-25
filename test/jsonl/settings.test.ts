@@ -1,6 +1,7 @@
 import * as assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
+  DEFAULT_AUTO_REFRESH,
   DEFAULT_INDENT,
   DEFAULT_MAX_LINES,
   INDEXED_PREVIEW_LINE_THRESHOLD,
@@ -13,22 +14,26 @@ test('settings validation falls back for invalid numbers', () => {
   assert.deepEqual(
     normalizeViewerSettings({
       maxLines: -1,
-      indent: 0
+      indent: 0,
+      autoRefresh: 'no'
     }),
     {
       maxLines: DEFAULT_MAX_LINES,
-      indent: DEFAULT_INDENT
+      indent: DEFAULT_INDENT,
+      autoRefresh: DEFAULT_AUTO_REFRESH
     }
   );
 
   assert.deepEqual(
     normalizeViewerSettings({
       maxLines: 0,
-      indent: 4
+      indent: 4,
+      autoRefresh: false
     }),
     {
       maxLines: 0,
-      indent: 4
+      indent: 4,
+      autoRefresh: false
     }
   );
 });

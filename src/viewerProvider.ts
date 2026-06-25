@@ -41,8 +41,6 @@ export class JsonlViewerProvider implements vscode.CustomReadonlyEditorProvider<
     webviewPanel.webview.options = {
       enableScripts: true
     };
-    webviewPanel.webview.html = getHtml(path.basename(document.uri.fsPath));
-    webviewPanel.reveal(webviewPanel.viewColumn, false);
 
     const disposables: vscode.Disposable[] = [];
     let generation = 0;
@@ -54,6 +52,21 @@ export class JsonlViewerProvider implements vscode.CustomReadonlyEditorProvider<
     let currentFileSnapshot: FileSnapshot | undefined;
     let exactLineCountCache: ExactLineCountCache | undefined;
     let exactLineCountRequest: ExactLineCountRequest | undefined;
+
+    webviewPanel.webview.html = getHtml(
+      path.basename(document.uri.fsPath),
+      currentSettings.autoRefresh
+    );
+    webviewPanel.reveal(webviewPanel.viewColumn, false);
+
+    const clearFileReloadTimer = (): void => {
+      if (!fileReloadTimer) {
+        return;
+      }
+
+      clearTimeout(fileReloadTimer);
+      fileReloadTimer = undefined;
+    };
 
     const cancelCurrentWork = (): void => {
       abortController?.abort();
@@ -157,6 +170,9 @@ export class JsonlViewerProvider implements vscode.CustomReadonlyEditorProvider<
       abortController = controller;
       fullIndex = undefined;
       currentSettings = getSettings();
+      if (!currentSettings.autoRefresh) {
+        clearFileReloadTimer();
+      }
 
       await postJsonlData(
         document.uri,
@@ -191,7 +207,7 @@ export class JsonlViewerProvider implements vscode.CustomReadonlyEditorProvider<
     };
 
     const scheduleFileReload = (): void => {
-      if (!webviewReady) {
+      if (!webviewReady || !currentSettings.autoRefresh) {
         return;
       }
 
@@ -199,9 +215,7 @@ export class JsonlViewerProvider implements vscode.CustomReadonlyEditorProvider<
       // abort/generation path clears stale indexes without thrashing the UI.
       invalidateExactLineCount();
 
-      if (fileReloadTimer) {
-        clearTimeout(fileReloadTimer);
-      }
+      clearFileReloadTimer();
 
       fileReloadTimer = setTimeout(() => {
         fileReloadTimer = undefined;
@@ -302,6 +316,12 @@ export class JsonlViewerProvider implements vscode.CustomReadonlyEditorProvider<
           return;
         }
 
+        if (message.type === 'refresh') {
+          clearFileReloadTimer();
+          safeLoad();
+          return;
+        }
+
         if (message.type === 'rawContents') {
           void vscode.commands.executeCommand(
             'vscode.openWith',
@@ -317,8 +337,13 @@ export class JsonlViewerProvider implements vscode.CustomReadonlyEditorProvider<
       vscode.workspace.onDidChangeConfiguration((event) => {
         if (
           event.affectsConfiguration(`${SETTINGS_SECTION}.maxLines`) ||
-          event.affectsConfiguration(`${SETTINGS_SECTION}.indent`)
+          event.affectsConfiguration(`${SETTINGS_SECTION}.indent`) ||
+          event.affectsConfiguration(`${SETTINGS_SECTION}.autoRefresh`)
         ) {
+          currentSettings = getSettings();
+          if (!currentSettings.autoRefresh) {
+            clearFileReloadTimer();
+          }
           safeLoad();
         }
       })
@@ -368,9 +393,7 @@ export class JsonlViewerProvider implements vscode.CustomReadonlyEditorProvider<
       cancelCurrentWork();
       currentFileSnapshot = undefined;
       abortExactLineCount();
-      if (fileReloadTimer) {
-        clearTimeout(fileReloadTimer);
-      }
+      clearFileReloadTimer();
       for (const disposable of disposables) {
         disposable.dispose();
       }

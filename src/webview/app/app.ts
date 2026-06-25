@@ -31,6 +31,7 @@ export function createWebviewApp(
 ): void {
   const content = elements.content;
   const modeButtons = elements.modeButtons;
+  const refreshButton = elements.refreshButton;
   const rawContentsButton = elements.rawContentsButton;
   const rowsInput = elements.rowsInput;
   const rowsError = elements.rowsError;
@@ -128,6 +129,10 @@ export function createWebviewApp(
     vscode.postMessage({ type: 'rawContents' });
   });
 
+  refreshButton.addEventListener('click', () => {
+    vscode.postMessage({ type: 'refresh' });
+  });
+
   rowsInput.addEventListener('keydown', (event) => {
     if (event.key === 'Enter') {
       event.preventDefault();
@@ -161,6 +166,7 @@ export function createWebviewApp(
 
       if (message.type === 'data') {
         viewState = 'limited';
+        updateRefreshButton(message.payload.autoRefresh);
         data = withLineCountState(message.payload);
         full = null;
         previewLoad = null;
@@ -236,6 +242,7 @@ export function createWebviewApp(
 
       if (message.type === 'previewLoadStart') {
         viewState = 'previewLoading';
+        updateRefreshButton(message.payload.autoRefresh);
         data = null;
         full = null;
         previewLoad = message.payload;
@@ -259,6 +266,7 @@ export function createWebviewApp(
 
       if (message.type === 'fullIndexStart') {
         viewState = 'fullIndexing';
+        updateRefreshButton(message.payload.autoRefresh);
         data = null;
         full = withLineCountState({
           ...message.payload,
@@ -289,6 +297,7 @@ export function createWebviewApp(
 
       if (message.type === 'fullIndexReady') {
         viewState = 'fullReady';
+        updateRefreshButton(message.payload.autoRefresh);
         full = withLineCountState(message.payload);
         fullProgress = null;
         resetVirtualMeasurements();
@@ -415,6 +424,10 @@ export function createWebviewApp(
         button.dataset.mode === mode ? 'true' : 'false'
       );
     }
+  }
+
+  function updateRefreshButton(autoRefresh: boolean): void {
+    refreshButton.hidden = autoRefresh;
   }
 
   function setControlsDisabled(disabled: boolean): void {

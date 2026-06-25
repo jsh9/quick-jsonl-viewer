@@ -21,6 +21,7 @@ export interface JsonlDataPayload {
   readonly lastModified: string;
   readonly maxLines: number;
   readonly indent: number;
+  readonly autoRefresh: boolean;
   readonly lineCount: number | null;
   readonly preview: JsonlPreview;
 }
@@ -79,7 +80,8 @@ export async function postJsonlData(
       fileSize: formatFileSize(stats.size),
       lastModified: stats.mtime.toLocaleString(),
       maxLines: settings.maxLines,
-      indent: settings.indent
+      indent: settings.indent,
+      autoRefresh: settings.autoRefresh
     };
 
     if (shouldUseIndexedPreview(settings.maxLines)) {

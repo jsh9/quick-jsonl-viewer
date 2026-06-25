@@ -117,6 +117,7 @@ export function createRenderer(context: RendererContext): Renderer {
 
   function renderError(message: string | undefined): void {
     setControlsDisabled(true);
+    enableRefreshWhenVisible();
     fileSize.textContent = 'Unavailable';
     lineCount.textContent = 'Unavailable';
     rowsInput.value = '';
@@ -132,6 +133,7 @@ export function createRenderer(context: RendererContext): Renderer {
 
   function renderCancelled(): void {
     setControlsDisabled(true);
+    enableRefreshWhenVisible();
     previewStatus.textContent = 'Loading cancelled';
     content.replaceChildren(
       status(
@@ -420,6 +422,11 @@ export function createRenderer(context: RendererContext): Renderer {
     lineCount.textContent = progress
       ? 'Counting ' + formatPercent(progress.percent)
       : 'Counting...';
+  }
+
+  function enableRefreshWhenVisible(): void {
+    const refreshButton = context.elements.refreshButton;
+    refreshButton.disabled = Boolean(refreshButton.hidden);
   }
 
   function renderLimitedVirtualRows(start: number, count: number): void {

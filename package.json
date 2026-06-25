@@ -100,6 +100,11 @@
           "default": 2,
           "minimum": 1,
           "description": "Number of spaces used to indent JSON in Pretty print mode."
+        },
+        "quickJsonlViewer.autoRefresh": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically refresh open JSONL viewers when the underlying file changes. Disable to refresh manually from the viewer toolbar."
         }
       }
     },

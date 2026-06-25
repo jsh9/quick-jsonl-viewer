@@ -1,9 +1,10 @@
 import { getWebviewScript } from './script';
 import { getWebviewStyles } from './styles';
 
-export function getHtml(fileName: string): string {
+export function getHtml(fileName: string, autoRefresh = true): string {
   const nonce = getNonce();
   const escapedTitle = escapeHtml(fileName);
+  const refreshButtonHidden = autoRefresh ? ' hidden' : '';
 
   /* c8 ignore start -- Embedded webview browser code is covered by source-contract tests until it is split into executable modules. */
   const html = /* html */ `<!DOCTYPE html>
@@ -32,6 +33,7 @@ ${getWebviewStyles()}
         <button class="mode-button" type="button" data-mode="pretty" aria-pressed="true">Pretty print</button>
         <button class="mode-button" type="button" data-mode="wrappedRaw" aria-pressed="false">Raw (wrapped)</button>
         <button class="mode-button" type="button" data-mode="rawLine" aria-pressed="false">Raw (unwrapped)</button>
+        <button class="mode-button refresh-action" type="button" id="refresh"${refreshButtonHidden}>Refresh</button>
         <button class="mode-button raw-action" type="button" id="raw-contents">Raw contents</button>
       </div>
     </div>
