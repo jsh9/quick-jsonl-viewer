@@ -424,6 +424,8 @@ test('custom editor reports unsupported schemes and missing files', async () => 
 });
 
 test('custom editor reopens matching active text diffs with VS Code diff editor', async () => {
+  // Verifies the fallback path for VS Code resolving this custom editor inside
+  // a diff: the empty webview is discarded and the native diff pair is restored.
   const harness = loadExtension();
   const panel = new FakeWebviewPanel();
   try {

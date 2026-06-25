@@ -22,6 +22,8 @@ test('package main points to the compiled extension entrypoint', async () => {
 });
 
 test('package contributes JSONL viewer as the default editor association', async () => {
+  // Verifies default JSONL opens still use the custom viewer, while native
+  // diff associations and menu guards keep Git review flows in VS Code's diff.
   const packageJsonPath = path.join(process.cwd(), 'package.json');
   const packageJson = JSON.parse(
     await fs.readFile(packageJsonPath, 'utf8')

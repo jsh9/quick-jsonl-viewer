@@ -56,6 +56,8 @@ test('openCurrentFile validates input and opens JSONL resources', async () => {
 });
 
 test('openCurrentFile resolves active editor and custom tab URIs', async () => {
+  // Verifies the ordinary implicit command paths still resolve to a concrete
+  // JSONL file after diff tabs were removed from active-editor resolution.
   const harness = loadExtension();
   try {
     harness.extension.activate(createContext());
@@ -90,6 +92,8 @@ test('openCurrentFile resolves active editor and custom tab URIs', async () => {
 });
 
 test('openCurrentFile blocks command palette use from diff tabs', async () => {
+  // Verifies implicit diff-tab commands do not collapse a side-by-side diff
+  // into the modified file, while explicit resource commands remain available.
   const harness = loadExtension();
   try {
     harness.extension.activate(createContext());

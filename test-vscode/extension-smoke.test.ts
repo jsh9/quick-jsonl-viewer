@@ -72,6 +72,8 @@ suite('Quick JSONL Viewer VS Code smoke tests', () => {
   });
 
   test('opens unstaged Git JSONL diffs with VS Code text diff editor', async function () {
+    // Verifies Git's unstaged change command keeps JSONL review in the native
+    // diff editor, covering the integration path manifest-only tests miss.
     this.timeout(10_000);
     await vscode.commands.executeCommand('workbench.action.closeAllEditors');
 
@@ -91,6 +93,8 @@ suite('Quick JSONL Viewer VS Code smoke tests', () => {
   });
 
   test('opens staged Git JSONL diffs with VS Code text diff editor', async function () {
+    // Verifies staged JSONL review also stays native; Git uses git: URIs here,
+    // so this protects the common review path separately from unstaged changes.
     this.timeout(10_000);
     await vscode.commands.executeCommand('workbench.action.closeAllEditors');
 

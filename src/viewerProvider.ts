@@ -38,6 +38,9 @@ export class JsonlViewerProvider implements vscode.CustomReadonlyEditorProvider<
     webviewPanel: vscode.WebviewPanel,
     _token: vscode.CancellationToken
   ): Promise<void> {
+    // VS Code can still ask this custom editor to resolve a diff side before
+    // applying diffEditorAssociations. Dispose the accidental webview and
+    // reopen the exact original/modified pair to preserve native diff state.
     const activeTextDiff = getActiveTextDiffForDocument(document.uri);
     if (activeTextDiff) {
       webviewPanel.dispose();
