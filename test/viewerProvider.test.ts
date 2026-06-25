@@ -2,6 +2,7 @@ import * as assert from 'node:assert/strict';
 import * as path from 'node:path';
 import { test } from 'node:test';
 import {
+  FakeTabInputTextDiff,
   FakeUri,
   FakeVscode,
   FakeWebviewPanel,
@@ -10,6 +11,7 @@ import {
   loadExtension,
   sleep,
   tempDir,
+  thisOwner,
   waitFor,
   waitForMessage,
   writeFixture
@@ -417,6 +419,42 @@ test('custom editor reports unsupported schemes and missing files', async () => 
     assert.match(missingError.message, /ENOENT/);
     missingPanel.dispose();
   } finally {
+    harness.restore();
+  }
+});
+
+test('custom editor reopens matching active text diffs with VS Code diff editor', async () => {
+  const harness = loadExtension();
+  const panel = new FakeWebviewPanel();
+  try {
+    const provider = activateAndGetProvider(harness);
+    const originalUri = FakeUri.file(path.join(tempDir, 'original.jsonl'));
+    const modifiedUri = FakeUri.file(
+      await writeFixture('modified.jsonl', '{"a":1}')
+    );
+    harness.fake.activeTabInput = new FakeTabInputTextDiff(
+      originalUri,
+      modifiedUri
+    );
+    thisOwner.activeTabInput = harness.fake.activeTabInput;
+    const document = await provider.openCustomDocument(modifiedUri);
+
+    await provider.resolveCustomEditor(document, panel, {});
+
+    assert.equal(panel.disposed, true);
+    assert.deepEqual(panel.webview.options, undefined);
+    assert.equal(panel.webview.html, '');
+    assert.deepEqual(harness.fake.executedCommands.at(-1), {
+      command: 'vscode.diff',
+      args: [
+        originalUri,
+        modifiedUri,
+        undefined,
+        { viewColumn: FakeVscode.ViewColumn.One }
+      ]
+    });
+  } finally {
+    thisOwner.activeTabInput = undefined;
     harness.restore();
   }
 });

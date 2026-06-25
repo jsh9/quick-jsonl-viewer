@@ -38,6 +38,21 @@ export class JsonlViewerProvider implements vscode.CustomReadonlyEditorProvider<
     webviewPanel: vscode.WebviewPanel,
     _token: vscode.CancellationToken
   ): Promise<void> {
+    const activeTextDiff = getActiveTextDiffForDocument(document.uri);
+    if (activeTextDiff) {
+      webviewPanel.dispose();
+      await vscode.commands.executeCommand(
+        'vscode.diff',
+        activeTextDiff.original,
+        activeTextDiff.modified,
+        undefined,
+        {
+          viewColumn: webviewPanel.viewColumn ?? vscode.ViewColumn.Active
+        }
+      );
+      return;
+    }
+
     webviewPanel.webview.options = {
       enableScripts: true
     };
@@ -378,4 +393,22 @@ export class JsonlViewerProvider implements vscode.CustomReadonlyEditorProvider<
 
     safeLoad();
   }
+}
+
+function getActiveTextDiffForDocument(
+  uri: vscode.Uri
+): vscode.TabInputTextDiff | undefined {
+  const input = vscode.window.tabGroups.activeTabGroup.activeTab?.input;
+  if (!(input instanceof vscode.TabInputTextDiff)) {
+    return undefined;
+  }
+
+  if (
+    input.original.toString() === uri.toString() ||
+    input.modified.toString() === uri.toString()
+  ) {
+    return input;
+  }
+
+  return undefined;
 }
