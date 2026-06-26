@@ -6,6 +6,8 @@ import {
   getCollapsedJsonLine,
   getJsonFoldKey,
   getJsonFoldRanges,
+  getJsonValueFoldKey,
+  getLongJsonStringValueLine,
   type JsonFoldRange
 } from '../lib/jsonFolding';
 import type {
@@ -635,12 +637,21 @@ export function createRenderer(context: RendererContext): Renderer {
     let lineIndex = 0;
     while (lineIndex < lines.length) {
       const range = foldRanges.get(lineIndex);
-      const foldKey = getJsonFoldKey(entry.lineNumber, lineIndex);
-      const isCollapsed = Boolean(range && collapsedJsonBlocks.has(foldKey));
+      const longValue = range
+        ? null
+        : getLongJsonStringValueLine(lines[lineIndex]);
+      const blockFoldKey = getJsonFoldKey(entry.lineNumber, lineIndex);
+      const valueFoldKey = getJsonValueFoldKey(entry.lineNumber, lineIndex);
+      const isCollapsed = Boolean(
+        (range && collapsedJsonBlocks.has(blockFoldKey)) ||
+        (longValue && collapsedJsonBlocks.has(valueFoldKey))
+      );
       const lineText =
         range && isCollapsed
           ? getCollapsedJsonLine(lines, range)
-          : lines[lineIndex];
+          : longValue && isCollapsed
+            ? longValue.collapsedLine
+            : lines[lineIndex];
 
       container.append(
         renderPrettyJsonLine(
@@ -651,6 +662,7 @@ export function createRenderer(context: RendererContext): Renderer {
           lineIndex,
           lineText,
           range,
+          longValue,
           isCollapsed
         )
       );
@@ -669,6 +681,7 @@ export function createRenderer(context: RendererContext): Renderer {
     lineIndex: number,
     lineText: string,
     range: JsonFoldRange | undefined,
+    longValue: ReturnType<typeof getLongJsonStringValueLine>,
     isCollapsed: boolean
   ): HTMLElement {
     const line = document.createElement('div');
@@ -683,6 +696,18 @@ export function createRenderer(context: RendererContext): Renderer {
           rowIndex,
           lineIndex,
           range,
+          isCollapsed
+        )
+      );
+    } else if (longValue) {
+      line.append(
+        renderJsonValueFoldToggle(
+          entry,
+          rowMode,
+          virtualized,
+          rowIndex,
+          lineIndex,
+          longValue.valueLength,
           isCollapsed
         )
       );
@@ -727,6 +752,36 @@ export function createRenderer(context: RendererContext): Renderer {
       event.preventDefault();
       event.stopPropagation();
       toggleJsonBlock(entry, rowMode, virtualized, rowIndex, lineIndex);
+    });
+    return toggle;
+  }
+
+  function renderJsonValueFoldToggle(
+    entry: JsonlJsonEntry,
+    rowMode: RenderMode,
+    virtualized: boolean,
+    rowIndex: number | undefined,
+    lineIndex: number,
+    valueLength: number,
+    isCollapsed: boolean
+  ): HTMLButtonElement {
+    const toggle = document.createElement('button');
+    toggle.type = 'button';
+    toggle.className = 'json-fold-toggle';
+    toggle.setAttribute('aria-expanded', isCollapsed ? 'false' : 'true');
+    toggle.setAttribute(
+      'aria-label',
+      (isCollapsed ? 'Expand' : 'Collapse') +
+        ' long JSON value on JSONL line ' +
+        String(entry.lineNumber) +
+        ', pretty-print line ' +
+        String(lineIndex + 1)
+    );
+    toggle.title = String(valueLength) + ' chars';
+    toggle.addEventListener('click', (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      toggleJsonValue(entry, rowMode, virtualized, rowIndex, lineIndex);
     });
     return toggle;
   }
@@ -779,6 +834,23 @@ export function createRenderer(context: RendererContext): Renderer {
     lineIndex: number
   ): void {
     const foldKey = getJsonFoldKey(entry.lineNumber, lineIndex);
+    if (collapsedJsonBlocks.has(foldKey)) {
+      collapsedJsonBlocks.delete(foldKey);
+    } else {
+      collapsedJsonBlocks.add(foldKey);
+    }
+
+    replaceRenderedEntry(entry, rowMode, virtualized, rowIndex);
+  }
+
+  function toggleJsonValue(
+    entry: JsonlJsonEntry,
+    rowMode: RenderMode,
+    virtualized: boolean,
+    rowIndex: number | undefined,
+    lineIndex: number
+  ): void {
+    const foldKey = getJsonValueFoldKey(entry.lineNumber, lineIndex);
     if (collapsedJsonBlocks.has(foldKey)) {
       collapsedJsonBlocks.delete(foldKey);
     } else {

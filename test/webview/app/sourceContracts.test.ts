@@ -114,6 +114,12 @@ test('pretty-print JSON blocks expose nested collapse controls', async () => {
   assert.match(source, /getJsonFoldRanges\(entry\.formatted\)/);
   assert.match(source, /className = 'json-fold-toggle'/);
   assert.match(source, /getCollapsedJsonLine\(lines, range\)/);
+  assert.match(source, /getLongJsonStringValueLine\(lines\[lineIndex\]\)/);
+  assert.match(source, /getJsonValueFoldKey\(entry\.lineNumber, lineIndex\)/);
+  assert.match(
+    source,
+    /toggleJsonValue\(entry, rowMode, virtualized, rowIndex, lineIndex\)/
+  );
   assert.match(
     source,
     /toggleJsonBlock\(entry, rowMode, virtualized, rowIndex, lineIndex\)/
