@@ -19,8 +19,10 @@ const SOURCE_FILES = [
   'src/webview/app/dom.ts',
   'src/webview/app/render.ts',
   'src/webview/app/sourceContracts.ts',
+  'src/webview/lib/collapse.ts',
   'src/webview/lib/format.ts',
   'src/webview/lib/highlight.ts',
+  'src/webview/lib/jsonFolding.ts',
   'src/webview/lib/protocol.ts',
   'src/webview/lib/virtualScroll.ts',
   'out/webview/main.js'
@@ -84,6 +86,39 @@ test('raw-line virtual rows stay unwrapped without fixed-height clipping', async
     source,
     /\.virtual-row\.raw-line \.line-body\s*\{[\s\S]*?overflow-y: hidden;/
   );
+});
+
+test('pretty-print rows expose row-level collapse controls', async () => {
+  const source = await readExtensionSource();
+
+  assert.match(source, /const collapsedPrettyLines = new Set/);
+  assert.match(source, /className = 'collapse-toggle'/);
+  assert.match(source, /setAttribute\('aria-expanded'/);
+  assert.match(source, /getCollapsedPreview\(entry\.raw\)/);
+  assert.match(source, /getHiddenLineCountText\(entry\.formatted\)/);
+  assert.match(
+    source,
+    /measureRenderedRows\(rowMode\);[\s\S]*?context\.scheduleVisibleRowsRequest\(\);/
+  );
+  assert.match(
+    source,
+    /\.collapsed-preview \{[\s\S]*?text-overflow: ellipsis;/
+  );
+});
+
+test('pretty-print JSON blocks expose nested collapse controls', async () => {
+  const source = await readExtensionSource();
+
+  assert.match(source, /const collapsedJsonBlocks = new Set/);
+  assert.match(source, /function renderPrettyJson\(/);
+  assert.match(source, /getJsonFoldRanges\(entry\.formatted\)/);
+  assert.match(source, /className = 'json-fold-toggle'/);
+  assert.match(source, /getCollapsedJsonLine\(lines, range\)/);
+  assert.match(
+    source,
+    /toggleJsonBlock\(entry, rowMode, virtualized, rowIndex, lineIndex\)/
+  );
+  assert.match(source, /\.pretty-json-line \{[\s\S]*?display: flex;/);
 });
 
 test('rows input rejects empty values before posting maxLines updates', async () => {

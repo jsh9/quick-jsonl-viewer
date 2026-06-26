@@ -1,11 +1,19 @@
 import { INDEXED_PREVIEW_LINE_THRESHOLD } from '../../shared/jsonlConstants';
+import { getCollapsedPreview, getHiddenLineCountText } from '../lib/collapse';
 import { formatBytes, formatInteger, formatPercent } from '../lib/format';
 import { tokenizeJson } from '../lib/highlight';
+import {
+  getCollapsedJsonLine,
+  getJsonFoldKey,
+  getJsonFoldRanges,
+  type JsonFoldRange
+} from '../lib/jsonFolding';
 import type {
   FullIndexProgress,
   FullIndexState,
   JsonlDataState,
   JsonlEntry,
+  JsonlJsonEntry,
   JsonlPreviewProgress,
   LineCountState,
   NormalizedLineCountProgress,
@@ -99,6 +107,8 @@ export function createRenderer(context: RendererContext): Renderer {
   const updateModeButtons = context.updateModeButtons;
   const setControlsDisabled = context.setControlsDisabled;
   const clearRowsError = context.clearRowsError;
+  const collapsedPrettyLines = new Set<number>();
+  const collapsedJsonBlocks = new Set<string>();
   let mode = context.getMode();
 
   function setRenderMode(nextMode: RenderMode): void {
@@ -106,6 +116,8 @@ export function createRenderer(context: RendererContext): Renderer {
   }
 
   function renderLoading(): void {
+    collapsedPrettyLines.clear();
+    collapsedJsonBlocks.clear();
     setControlsDisabled(true);
     fileSize.textContent = 'Loading...';
     lineCount.textContent = 'Counting...';
@@ -120,6 +132,8 @@ export function createRenderer(context: RendererContext): Renderer {
   }
 
   function renderError(message: string | undefined): void {
+    collapsedPrettyLines.clear();
+    collapsedJsonBlocks.clear();
     setControlsDisabled(true);
     enableRefreshWhenVisible();
     fileSize.textContent = 'Unavailable';
@@ -551,8 +565,15 @@ export function createRenderer(context: RendererContext): Renderer {
     virtualized: boolean,
     rowIndex?: number
   ): HTMLElement {
+    const isCollapsible = rowMode === 'pretty' && entry.kind === 'json';
+    const isCollapsed =
+      isCollapsible && collapsedPrettyLines.has(entry.lineNumber);
     const row = document.createElement('section');
     row.className = entry.kind === 'error' ? 'entry error' : 'entry';
+    row.dataset.lineNumber = String(entry.lineNumber);
+    if (isCollapsed) {
+      row.classList.add('collapsed');
+    }
     if (virtualized) {
       row.classList.add('virtual-row');
       row.dataset.index = String(rowIndex);
@@ -563,31 +584,242 @@ export function createRenderer(context: RendererContext): Renderer {
 
     const line = document.createElement('div');
     line.className = 'line-number';
-    line.textContent = String(entry.lineNumber);
+    if (isCollapsible) {
+      line.append(
+        renderCollapseToggle(entry, rowMode, virtualized, rowIndex, isCollapsed)
+      );
+    }
+    const lineText = document.createElement('span');
+    lineText.className = 'line-number-text';
+    lineText.textContent = String(entry.lineNumber);
+    line.append(lineText);
 
     const body = document.createElement('div');
     body.className = 'line-body';
 
-    if (entry.kind === 'error' && rowMode === 'pretty') {
+    if (entry.kind === 'json' && isCollapsed) {
+      body.append(renderCollapsedSummary(entry));
+    } else if (entry.kind === 'error' && rowMode === 'pretty') {
       const error = document.createElement('p');
       error.className = 'parse-error';
       error.textContent = 'Invalid JSON: ' + entry.error;
       const raw = document.createElement('pre');
       appendHighlightedJson(raw, entry.raw);
       body.append(error, raw);
+    } else if (entry.kind === 'json' && rowMode === 'pretty') {
+      body.append(renderPrettyJson(entry, rowMode, virtualized, rowIndex));
     } else {
       const rendered = document.createElement('pre');
-      appendHighlightedJson(
-        rendered,
-        rowMode === 'pretty' && entry.kind === 'json'
-          ? entry.formatted
-          : entry.raw
-      );
+      appendHighlightedJson(rendered, entry.raw);
       body.append(rendered);
     }
 
     row.append(line, body);
     return row;
+  }
+
+  function renderPrettyJson(
+    entry: JsonlJsonEntry,
+    rowMode: RenderMode,
+    virtualized: boolean,
+    rowIndex: number | undefined
+  ): HTMLElement {
+    const container = document.createElement('div');
+    container.className = 'pretty-json';
+    const lines = entry.formatted.split('\n');
+    const foldRanges = new Map<number, JsonFoldRange>();
+    for (const range of getJsonFoldRanges(entry.formatted)) {
+      foldRanges.set(range.startLine, range);
+    }
+
+    let lineIndex = 0;
+    while (lineIndex < lines.length) {
+      const range = foldRanges.get(lineIndex);
+      const foldKey = getJsonFoldKey(entry.lineNumber, lineIndex);
+      const isCollapsed = Boolean(range && collapsedJsonBlocks.has(foldKey));
+      const lineText =
+        range && isCollapsed
+          ? getCollapsedJsonLine(lines, range)
+          : lines[lineIndex];
+
+      container.append(
+        renderPrettyJsonLine(
+          entry,
+          rowMode,
+          virtualized,
+          rowIndex,
+          lineIndex,
+          lineText,
+          range,
+          isCollapsed
+        )
+      );
+
+      lineIndex = range && isCollapsed ? range.endLine + 1 : lineIndex + 1;
+    }
+
+    return container;
+  }
+
+  function renderPrettyJsonLine(
+    entry: JsonlJsonEntry,
+    rowMode: RenderMode,
+    virtualized: boolean,
+    rowIndex: number | undefined,
+    lineIndex: number,
+    lineText: string,
+    range: JsonFoldRange | undefined,
+    isCollapsed: boolean
+  ): HTMLElement {
+    const line = document.createElement('div');
+    line.className = 'pretty-json-line';
+
+    if (range) {
+      line.append(
+        renderJsonFoldToggle(
+          entry,
+          rowMode,
+          virtualized,
+          rowIndex,
+          lineIndex,
+          range,
+          isCollapsed
+        )
+      );
+    } else {
+      const spacer = document.createElement('span');
+      spacer.className = 'json-fold-spacer';
+      line.append(spacer);
+    }
+
+    const code = document.createElement('pre');
+    code.className = 'pretty-json-code';
+    appendHighlightedJson(code, lineText);
+    line.append(code);
+    return line;
+  }
+
+  function renderJsonFoldToggle(
+    entry: JsonlJsonEntry,
+    rowMode: RenderMode,
+    virtualized: boolean,
+    rowIndex: number | undefined,
+    lineIndex: number,
+    range: JsonFoldRange,
+    isCollapsed: boolean
+  ): HTMLButtonElement {
+    const toggle = document.createElement('button');
+    toggle.type = 'button';
+    toggle.className = 'json-fold-toggle';
+    toggle.setAttribute('aria-expanded', isCollapsed ? 'false' : 'true');
+    toggle.setAttribute(
+      'aria-label',
+      (isCollapsed ? 'Expand' : 'Collapse') +
+        ' JSON block on JSONL line ' +
+        String(entry.lineNumber) +
+        ', pretty-print line ' +
+        String(lineIndex + 1)
+    );
+    toggle.title =
+      String(range.hiddenLineCount) +
+      (range.hiddenLineCount === 1 ? ' line' : ' lines');
+    toggle.addEventListener('click', (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      toggleJsonBlock(entry, rowMode, virtualized, rowIndex, lineIndex);
+    });
+    return toggle;
+  }
+
+  function renderCollapseToggle(
+    entry: JsonlEntry,
+    rowMode: RenderMode,
+    virtualized: boolean,
+    rowIndex: number | undefined,
+    isCollapsed: boolean
+  ): HTMLButtonElement {
+    const toggle = document.createElement('button');
+    toggle.type = 'button';
+    toggle.className = 'collapse-toggle';
+    toggle.setAttribute('aria-expanded', isCollapsed ? 'false' : 'true');
+    toggle.setAttribute(
+      'aria-label',
+      (isCollapsed ? 'Expand' : 'Collapse') +
+        ' JSONL line ' +
+        String(entry.lineNumber)
+    );
+    toggle.addEventListener('click', (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      toggleCollapsedLine(entry, rowMode, virtualized, rowIndex);
+    });
+    return toggle;
+  }
+
+  function toggleCollapsedLine(
+    entry: JsonlEntry,
+    rowMode: RenderMode,
+    virtualized: boolean,
+    rowIndex: number | undefined
+  ): void {
+    if (collapsedPrettyLines.has(entry.lineNumber)) {
+      collapsedPrettyLines.delete(entry.lineNumber);
+    } else {
+      collapsedPrettyLines.add(entry.lineNumber);
+    }
+
+    replaceRenderedEntry(entry, rowMode, virtualized, rowIndex);
+  }
+
+  function toggleJsonBlock(
+    entry: JsonlJsonEntry,
+    rowMode: RenderMode,
+    virtualized: boolean,
+    rowIndex: number | undefined,
+    lineIndex: number
+  ): void {
+    const foldKey = getJsonFoldKey(entry.lineNumber, lineIndex);
+    if (collapsedJsonBlocks.has(foldKey)) {
+      collapsedJsonBlocks.delete(foldKey);
+    } else {
+      collapsedJsonBlocks.add(foldKey);
+    }
+
+    replaceRenderedEntry(entry, rowMode, virtualized, rowIndex);
+  }
+
+  function replaceRenderedEntry(
+    entry: JsonlEntry,
+    rowMode: RenderMode,
+    virtualized: boolean,
+    rowIndex: number | undefined
+  ): void {
+    const replacement = renderEntry(entry, rowMode, virtualized, rowIndex);
+    const current = document.querySelector<HTMLElement>(
+      '.entry[data-line-number="' + String(entry.lineNumber) + '"]'
+    );
+    current?.replaceWith(replacement);
+
+    if (virtualized) {
+      measureRenderedRows(rowMode);
+      context.scheduleVisibleRowsRequest();
+    }
+  }
+
+  function renderCollapsedSummary(entry: JsonlJsonEntry): HTMLElement {
+    const summary = document.createElement('div');
+    summary.className = 'collapsed-summary';
+
+    const preview = document.createElement('pre');
+    preview.className = 'collapsed-preview';
+    preview.textContent = getCollapsedPreview(entry.raw);
+
+    const meta = document.createElement('span');
+    meta.className = 'collapsed-meta';
+    meta.textContent = getHiddenLineCountText(entry.formatted);
+
+    summary.append(preview, meta);
+    return summary;
   }
 
   function appendHighlightedJson(target: HTMLElement, value: string): void {
