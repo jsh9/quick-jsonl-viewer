@@ -4,6 +4,7 @@ import {
   DEFAULT_AUTO_REFRESH,
   DEFAULT_INDENT,
   DEFAULT_MAX_LINES,
+  DEFAULT_START_LINE,
   INDEXED_PREVIEW_LINE_THRESHOLD,
   getDisplayRowCount,
   normalizeViewerSettings,
@@ -15,12 +16,14 @@ test('settings validation falls back for invalid numbers', () => {
     normalizeViewerSettings({
       maxLines: -1,
       indent: 0,
-      autoRefresh: 'no'
+      autoRefresh: 'no',
+      startLine: 0
     }),
     {
       maxLines: DEFAULT_MAX_LINES,
       indent: DEFAULT_INDENT,
-      autoRefresh: DEFAULT_AUTO_REFRESH
+      autoRefresh: DEFAULT_AUTO_REFRESH,
+      startLine: DEFAULT_START_LINE
     }
   );
 
@@ -28,12 +31,14 @@ test('settings validation falls back for invalid numbers', () => {
     normalizeViewerSettings({
       maxLines: 0,
       indent: 4,
-      autoRefresh: false
+      autoRefresh: false,
+      startLine: 10
     }),
     {
       maxLines: 0,
       indent: 4,
-      autoRefresh: false
+      autoRefresh: false,
+      startLine: 10
     }
   );
 });
@@ -51,4 +56,7 @@ test('large positive row counts use indexed preview and clamp to total lines', (
   assert.equal(getDisplayRowCount(200_000, 0), 200_000);
   assert.equal(getDisplayRowCount(200_000, 1_000), 1_000);
   assert.equal(getDisplayRowCount(200_000, 10_000_000), 200_000);
+  assert.equal(getDisplayRowCount(200_000, 0, 100_001), 100_000);
+  assert.equal(getDisplayRowCount(200_000, 1_000, 199_501), 500);
+  assert.equal(getDisplayRowCount(200_000, 1_000, 200_001), 0);
 });

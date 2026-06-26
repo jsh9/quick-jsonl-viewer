@@ -54,6 +54,8 @@ Use `Ctrl+F` on Windows/Linux or `Cmd+F` on macOS to search text in the rendered
 - `quickJsonlViewer.maxLines`: number of lines to show. Default is `20`.
 - `quickJsonlViewer.maxLines: 0`: index the full file and render visible rows on demand.
 - The info bar `Show [input] rows` control updates `quickJsonlViewer.maxLines` globally when you press Enter or leave the field.
+- `quickJsonlViewer.startLine`: one-based line number to start displaying from. Default is `1`.
+- The info bar `Start [input] row` control updates `quickJsonlViewer.startLine` globally when you press Enter or leave the field.
 - `quickJsonlViewer.indent`: number of spaces for Pretty print formatting. Default is `2`; minimum is `1`.
 - `quickJsonlViewer.autoRefresh`: automatically refresh open viewers when the underlying file changes. Default is `true`. Set to `false` to refresh manually from the viewer toolbar.
 

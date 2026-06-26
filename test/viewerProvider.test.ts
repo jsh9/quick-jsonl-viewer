@@ -38,9 +38,13 @@ test('custom editor posts limited preview data after the webview is ready', asyn
     panel.webview.receive({ type: 'ready' });
     const data = await waitForMessage<{
       readonly type: string;
-      readonly payload: { readonly preview: { readonly entries: unknown[] } };
+      readonly payload: {
+        readonly startLine: number;
+        readonly preview: { readonly entries: unknown[] };
+      };
     }>(panel, (message) => message.type === 'data');
 
+    assert.equal(data.payload.startLine, 1);
     assert.equal(data.payload.preview.entries.length, 2);
     assert.deepEqual(
       panel.webview.messages
@@ -49,6 +53,50 @@ test('custom editor posts limited preview data after the webview is ready', asyn
       ['loading', 'previewLoadStart', 'previewLoadProgress']
     );
     (document as unknown as { dispose(): void }).dispose();
+  } finally {
+    panel.dispose();
+    harness.restore();
+  }
+});
+
+test('custom editor can start limited previews from a configured line', async () => {
+  const harness = loadExtension();
+  const filePath = await writeFixture(
+    'middle-limited.jsonl',
+    '{"a":1}\n{"b":2}\n{"c":3}\n{"d":4}'
+  );
+  const panel = new FakeWebviewPanel();
+  try {
+    harness.fake.maxLines = 2;
+    harness.fake.startLine = 3;
+    const provider = activateAndGetProvider(harness);
+    const uri = FakeUri.file(filePath);
+    const document = await provider.openCustomDocument(uri);
+
+    await provider.resolveCustomEditor(document, panel, {});
+    panel.webview.receive({ type: 'ready' });
+    const data = await waitForMessage<{
+      readonly type: string;
+      readonly payload: {
+        readonly startLine: number;
+        readonly preview: {
+          readonly entries: Array<{
+            readonly lineNumber: number;
+            readonly raw: string;
+          }>;
+        };
+      };
+    }>(panel, (message) => message.type === 'data');
+
+    assert.equal(data.payload.startLine, 3);
+    assert.deepEqual(
+      data.payload.preview.entries.map((entry) => entry.lineNumber),
+      [3, 4]
+    );
+    assert.deepEqual(
+      data.payload.preview.entries.map((entry) => entry.raw),
+      ['{"c":3}', '{"d":4}']
+    );
   } finally {
     panel.dispose();
     harness.restore();
@@ -162,6 +210,67 @@ test('custom editor handles full indexing, row fetches, cancellation, and raw co
   }
 });
 
+test('custom editor can start indexed viewers from a configured line', async () => {
+  const harness = loadExtension();
+  const filePath = await writeFixture(
+    'middle-full.jsonl',
+    '{"a":1}\n{"b":2}\n{"c":3}'
+  );
+  const panel = new FakeWebviewPanel();
+  try {
+    harness.fake.maxLines = 0;
+    harness.fake.startLine = 2;
+    const provider = activateAndGetProvider(harness);
+    const uri = FakeUri.file(filePath);
+    const document = await provider.openCustomDocument(uri);
+
+    await provider.resolveCustomEditor(document, panel, {});
+    panel.webview.receive({ type: 'ready' });
+    const ready = await waitForMessage<{
+      readonly type: string;
+      readonly payload: {
+        readonly startLine: number;
+        readonly totalRows: number;
+      };
+    }>(panel, (message) => message.type === 'fullIndexReady');
+    assert.equal(ready.payload.startLine, 2);
+    assert.equal(ready.payload.totalRows, 2);
+
+    panel.webview.receive({
+      type: 'fetchRows',
+      requestId: 'middle',
+      start: 0,
+      count: 2
+    });
+    const rows = await waitForMessage<{
+      readonly type: string;
+      readonly requestId: string;
+      readonly payload: {
+        readonly start: number;
+        readonly totalLines: number;
+        readonly entries: Array<{
+          readonly lineNumber: number;
+          readonly raw: string;
+        }>;
+      };
+    }>(panel, (message) => message.type === 'rows');
+    assert.equal(rows.requestId, 'middle');
+    assert.equal(rows.payload.start, 0);
+    assert.equal(rows.payload.totalLines, 2);
+    assert.deepEqual(
+      rows.payload.entries.map((entry) => entry.lineNumber),
+      [2, 3]
+    );
+    assert.deepEqual(
+      rows.payload.entries.map((entry) => entry.raw),
+      ['{"b":2}', '{"c":3}']
+    );
+  } finally {
+    panel.dispose();
+    harness.restore();
+  }
+});
+
 test('custom editor validates max-line messages and writes valid updates', async () => {
   const harness = loadExtension();
   const filePath = await writeFixture('settings.jsonl', '{"a":1}');
@@ -174,6 +283,9 @@ test('custom editor validates max-line messages and writes valid updates', async
     panel.webview.receive({ type: 'updateMaxLines', value: -1 });
     await waitForMessage(panel, (message) => message.type === 'maxLinesError');
 
+    panel.webview.receive({ type: 'updateStartLine', value: 0 });
+    await waitForMessage(panel, (message) => message.type === 'startLineError');
+
     const errorCount = panel.webview.messages.length;
     panel.webview.receive({ type: 'updateMaxLines', value: '7' });
     await waitFor(() =>
@@ -182,11 +294,27 @@ test('custom editor validates max-line messages and writes valid updates', async
         .some((message) => getMessageType(message) === 'maxLinesError')
     );
 
+    const startLineErrorCount = panel.webview.messages.length;
+    panel.webview.receive({ type: 'updateStartLine', value: '7' });
+    await waitFor(() =>
+      panel.webview.messages
+        .slice(startLineErrorCount)
+        .some((message) => getMessageType(message) === 'startLineError')
+    );
+
     panel.webview.receive({ type: 'updateMaxLines', value: 7 });
     await waitFor(() => harness.fake.configurationUpdates.length === 1);
     assert.deepEqual(harness.fake.configurationUpdates[0], {
       key: 'maxLines',
       value: 7,
+      target: FakeVscode.ConfigurationTarget.Global
+    });
+
+    panel.webview.receive({ type: 'updateStartLine', value: 5 });
+    await waitFor(() => harness.fake.configurationUpdates.length === 2);
+    assert.deepEqual(harness.fake.configurationUpdates[1], {
+      key: 'startLine',
+      value: 5,
       target: FakeVscode.ConfigurationTarget.Global
     });
   } finally {
@@ -249,6 +377,13 @@ test('custom editor reports fetch and settings update handler failures', async (
       readonly message: string;
     }>(settingsPanel, (message) => message.type === 'maxLinesError');
     assert.equal(settingsError.message, 'settings failed');
+
+    settingsPanel.webview.receive({ type: 'updateStartLine', value: 8 });
+    const startLineError = await waitForMessage<{
+      readonly type?: unknown;
+      readonly message: string;
+    }>(settingsPanel, (message) => message.type === 'startLineError');
+    assert.equal(startLineError.message, 'settings failed');
   } finally {
     settingsPanel.dispose();
     settingsHarness.restore();

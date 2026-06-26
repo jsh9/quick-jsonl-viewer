@@ -238,12 +238,14 @@ export class JsonlViewerProvider implements vscode.CustomReadonlyEditorProvider<
       const mode = getWebviewRenderMode(message.mode);
       const totalRows = getDisplayRowCount(
         fullIndex.indexedLineCount,
-        currentSettings.maxLines
+        currentSettings.maxLines,
+        currentSettings.startLine
       );
       const start = clampMessageInteger(message.start, 0, totalRows);
       const count = clampMessageInteger(message.count, 0, totalRows - start);
+      const fileStart = currentSettings.startLine - 1 + start;
       const rows = await fetchJsonlRows(document.uri.fsPath, fullIndex, {
-        start,
+        start: fileStart,
         count,
         indent: currentSettings.indent
       });
@@ -257,7 +259,7 @@ export class JsonlViewerProvider implements vscode.CustomReadonlyEditorProvider<
         requestId,
         mode,
         payload: {
-          ...rows,
+          entries: rows.entries,
           start,
           totalLines: totalRows
         }
@@ -280,6 +282,24 @@ export class JsonlViewerProvider implements vscode.CustomReadonlyEditorProvider<
       await vscode.workspace
         .getConfiguration(SETTINGS_SECTION)
         .update('maxLines', value, vscode.ConfigurationTarget.Global);
+    };
+
+    const handleUpdateStartLine = async (
+      message: WebviewMessage
+    ): Promise<void> => {
+      const value =
+        typeof message.value === 'number' ? message.value : Number.NaN;
+      if (!Number.isInteger(value) || value < 1) {
+        await webviewPanel.webview.postMessage({
+          type: 'startLineError',
+          message: 'Start row must be a positive whole number.'
+        });
+        return;
+      }
+
+      await vscode.workspace
+        .getConfiguration(SETTINGS_SECTION)
+        .update('startLine', value, vscode.ConfigurationTarget.Global);
     };
 
     disposables.push(
@@ -316,6 +336,16 @@ export class JsonlViewerProvider implements vscode.CustomReadonlyEditorProvider<
           return;
         }
 
+        if (message.type === 'updateStartLine') {
+          void handleUpdateStartLine(message).catch(async (error: unknown) => {
+            await webviewPanel.webview.postMessage({
+              type: 'startLineError',
+              message: formatError(error)
+            });
+          });
+          return;
+        }
+
         if (message.type === 'refresh') {
           clearFileReloadTimer();
           safeLoad();
@@ -337,6 +367,7 @@ export class JsonlViewerProvider implements vscode.CustomReadonlyEditorProvider<
       vscode.workspace.onDidChangeConfiguration((event) => {
         if (
           event.affectsConfiguration(`${SETTINGS_SECTION}.maxLines`) ||
+          event.affectsConfiguration(`${SETTINGS_SECTION}.startLine`) ||
           event.affectsConfiguration(`${SETTINGS_SECTION}.indent`) ||
           event.affectsConfiguration(`${SETTINGS_SECTION}.autoRefresh`)
         ) {

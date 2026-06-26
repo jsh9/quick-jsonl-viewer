@@ -5,6 +5,7 @@ import * as vscode from 'vscode';
 import {
   countJsonlLines,
   formatFileSize,
+  getDisplayRowCount,
   indexJsonlFile,
   isAbortError,
   JsonlLineIndex,
@@ -22,6 +23,7 @@ export interface JsonlDataPayload {
   readonly maxLines: number;
   readonly indent: number;
   readonly autoRefresh: boolean;
+  readonly startLine: number;
   readonly lineCount: number | null;
   readonly preview: JsonlPreview;
 }
@@ -81,11 +83,15 @@ export async function postJsonlData(
       lastModified: stats.mtime.toLocaleString(),
       maxLines: settings.maxLines,
       indent: settings.indent,
-      autoRefresh: settings.autoRefresh
+      autoRefresh: settings.autoRefresh,
+      startLine: settings.startLine
     };
 
     if (shouldUseIndexedPreview(settings.maxLines)) {
-      const lineLimit = settings.maxLines > 0 ? settings.maxLines : undefined;
+      const lineLimit =
+        settings.maxLines > 0
+          ? settings.startLine - 1 + settings.maxLines
+          : undefined;
       await webview.postMessage({
         type: 'fullIndexStart',
         payload: {
@@ -124,7 +130,11 @@ export async function postJsonlData(
         payload: {
           ...metadata,
           lineCount: lineCount ?? null,
-          totalRows: index.indexedLineCount,
+          totalRows: getDisplayRowCount(
+            index.indexedLineCount,
+            settings.maxLines,
+            settings.startLine
+          ),
           isComplete: index.isComplete
         }
       });

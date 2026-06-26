@@ -25,11 +25,18 @@ export interface ReadJsonlPreviewOptions {
 
 export async function readJsonlPreview(
   filePath: string,
-  settings: Pick<ViewerSettings, 'maxLines' | 'indent'>,
+  settings: Pick<ViewerSettings, 'maxLines' | 'indent'> &
+    Partial<Pick<ViewerSettings, 'startLine'>>,
   options: ReadJsonlPreviewOptions = {}
 ): Promise<JsonlPreview> {
   throwIfAborted(options.signal);
 
+  const startLine =
+    typeof settings.startLine === 'number' &&
+    Number.isInteger(settings.startLine) &&
+    settings.startLine >= 1
+      ? settings.startLine
+      : 1;
   const entries: JsonlEntry[] = [];
   const plainLines: string[] = [];
   const stream = fs.createReadStream(filePath, { encoding: 'utf8' });
@@ -70,6 +77,10 @@ export async function readJsonlPreview(
     for await (const line of lineReader) {
       throwIfAborted(options.signal);
       lineNumber += 1;
+
+      if (lineNumber < startLine) {
+        continue;
+      }
 
       if (settings.maxLines === 0 || entries.length < settings.maxLines) {
         entries.push(formatJsonlLine(lineNumber, line, settings.indent));

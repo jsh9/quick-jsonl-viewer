@@ -1,5 +1,7 @@
 export const MAX_LINES_ERROR_MESSAGE =
   'Rows must be 0 or a positive whole number.';
+export const START_LINE_ERROR_MESSAGE =
+  'Start row must be a positive whole number.';
 
 export const EXTENSION_MESSAGE_TYPES = [
   'loading',
@@ -8,6 +10,7 @@ export const EXTENSION_MESSAGE_TYPES = [
   'lineCountProgress',
   'lineCountError',
   'maxLinesError',
+  'startLineError',
   'previewLoadStart',
   'previewLoadProgress',
   'fullIndexStart',
@@ -24,6 +27,7 @@ export const WEBVIEW_POSTED_MESSAGE_TYPES = [
   'refresh',
   'cancelIndex',
   'fetchRows',
+  'updateStartLine',
   'updateMaxLines'
 ] as const;
 
@@ -94,6 +98,7 @@ export interface JsonlMetadataPayload {
   maxLines: number;
   indent: number;
   autoRefresh: boolean;
+  startLine: number;
 }
 
 export interface JsonlDataPayload extends JsonlMetadataPayload {
@@ -130,6 +135,7 @@ export type ExtensionMessage =
   | { type: 'lineCountProgress'; payload: unknown }
   | { type: 'lineCountError'; message?: string }
   | { type: 'maxLinesError'; message?: string }
+  | { type: 'startLineError'; message?: string }
   | { type: 'previewLoadStart'; payload: PreviewLoadPayload }
   | { type: 'previewLoadProgress'; payload: JsonlPreviewProgress }
   | { type: 'fullIndexStart'; payload: FullIndexStartPayload }
@@ -160,6 +166,7 @@ export type WebviewPostMessage =
       count: number;
       mode: RenderMode;
     }
+  | { type: 'updateStartLine'; value: number }
   | { type: 'updateMaxLines'; value: number };
 
 export interface MaxLinesValidationResult {

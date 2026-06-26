@@ -5,6 +5,7 @@ import {
 import { createRenderer, type VscodeApi } from './render';
 import {
   MAX_LINES_ERROR_MESSAGE,
+  START_LINE_ERROR_MESSAGE,
   type ExtensionMessage,
   type FullIndexProgress,
   type FullIndexState,
@@ -33,6 +34,7 @@ export function createWebviewApp(
   const modeButtons = elements.modeButtons;
   const refreshButton = elements.refreshButton;
   const rawContentsButton = elements.rawContentsButton;
+  const startInput = elements.startInput;
   const rowsInput = elements.rowsInput;
   const rowsError = elements.rowsError;
 
@@ -50,6 +52,7 @@ export function createWebviewApp(
   let pendingRequestId = '';
   let animationFrame = 0;
   let lastSubmittedMaxLines = '';
+  let lastSubmittedStartLine = '';
 
   const renderer = createRenderer({
     vscode,
@@ -77,6 +80,9 @@ export function createWebviewApp(
     },
     setLastSubmittedMaxLines: (value) => {
       lastSubmittedMaxLines = value;
+    },
+    setLastSubmittedStartLine: (value) => {
+      lastSubmittedStartLine = value;
     },
     scheduleVisibleRowsRequest,
     requestVisibleRows,
@@ -140,11 +146,26 @@ export function createWebviewApp(
     }
   });
 
+  startInput.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      submitStartLine();
+    }
+  });
+
   rowsInput.addEventListener('blur', () => {
     submitMaxLines();
   });
 
+  startInput.addEventListener('blur', () => {
+    submitStartLine();
+  });
+
   rowsInput.addEventListener('input', () => {
+    clearRowsError();
+  });
+
+  startInput.addEventListener('input', () => {
     clearRowsError();
   });
 
@@ -237,6 +258,11 @@ export function createWebviewApp(
 
       if (message.type === 'maxLinesError') {
         showRowsError(message.message || MAX_LINES_ERROR_MESSAGE);
+        return;
+      }
+
+      if (message.type === 'startLineError') {
+        showStartLineError(message.message || START_LINE_ERROR_MESSAGE);
         return;
       }
 
@@ -464,12 +490,48 @@ export function createWebviewApp(
     });
   }
 
+  function submitStartLine(): void {
+    if (startInput.disabled) {
+      return;
+    }
+
+    const rawValue = startInput.value.trim();
+    if (rawValue === '') {
+      showStartLineError('Start row must be a positive whole number.');
+      return;
+    }
+
+    const value = Number(rawValue);
+    if (!Number.isInteger(value) || value < 1) {
+      showStartLineError('Start row must be a positive whole number.');
+      return;
+    }
+
+    const nextValue = String(value);
+    if (nextValue === lastSubmittedStartLine) {
+      return;
+    }
+
+    lastSubmittedStartLine = nextValue;
+    clearRowsError();
+    vscode.postMessage({
+      type: 'updateStartLine',
+      value
+    });
+  }
+
   function showRowsError(message: string): void {
     rowsInput.classList.add('invalid');
     rowsError.textContent = message;
   }
 
+  function showStartLineError(message: string): void {
+    startInput.classList.add('invalid');
+    rowsError.textContent = message;
+  }
+
   function clearRowsError(): void {
+    startInput.classList.remove('invalid');
     rowsInput.classList.remove('invalid');
     rowsError.textContent = '';
   }

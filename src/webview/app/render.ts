@@ -75,6 +75,7 @@ export interface RendererContext {
   ) => void;
   readonly setViewState: (state: ViewState) => void;
   readonly setLastSubmittedMaxLines: (value: string) => void;
+  readonly setLastSubmittedStartLine: (value: string) => void;
   readonly scheduleVisibleRowsRequest: () => void;
   readonly requestVisibleRows: () => void;
   readonly requestLimitedVisibleRows: () => void;
@@ -88,6 +89,7 @@ export function createRenderer(context: RendererContext): Renderer {
   const content = context.elements.content;
   const fileSize = context.elements.fileSize;
   const lineCount = context.elements.lineCount;
+  const startInput = context.elements.startInput;
   const rowsInput = context.elements.rowsInput;
   const modified = context.elements.modified;
   const previewStatus = context.elements.previewStatus;
@@ -107,6 +109,8 @@ export function createRenderer(context: RendererContext): Renderer {
     setControlsDisabled(true);
     fileSize.textContent = 'Loading...';
     lineCount.textContent = 'Counting...';
+    startInput.value = '';
+    context.setLastSubmittedStartLine('');
     rowsInput.value = '';
     context.setLastSubmittedMaxLines('');
     modified.textContent = 'Loading...';
@@ -120,6 +124,8 @@ export function createRenderer(context: RendererContext): Renderer {
     enableRefreshWhenVisible();
     fileSize.textContent = 'Unavailable';
     lineCount.textContent = 'Unavailable';
+    startInput.value = '';
+    context.setLastSubmittedStartLine('');
     rowsInput.value = '';
     context.setLastSubmittedMaxLines('');
     modified.textContent = 'Unavailable';
@@ -153,6 +159,8 @@ export function createRenderer(context: RendererContext): Renderer {
     setControlsDisabled(true);
     fileSize.textContent = previewLoad.fileSize;
     lineCount.textContent = 'Counting...';
+    startInput.value = String(previewLoad.startLine);
+    context.setLastSubmittedStartLine(startInput.value);
     rowsInput.value = String(previewLoad.maxLines);
     context.setLastSubmittedMaxLines(rowsInput.value);
     modified.textContent = previewLoad.lastModified;
@@ -262,19 +270,16 @@ export function createRenderer(context: RendererContext): Renderer {
       data.lineCount,
       data.lineCountProgress
     );
+    startInput.value = String(data.startLine);
+    context.setLastSubmittedStartLine(startInput.value);
     rowsInput.value = String(data.maxLines);
     context.setLastSubmittedMaxLines(rowsInput.value);
     modified.textContent = data.lastModified;
 
-    const loaded = data.preview.loadedLineCount;
-    const limit = data.maxLines;
-    if (loaded >= limit) {
-      previewStatus.textContent =
-        'Showing first ' + formatInteger(loaded) + ' lines';
-    } else {
-      previewStatus.textContent =
-        'Showing ' + formatInteger(loaded) + ' loaded lines';
-    }
+    previewStatus.textContent = getVisibleRangeLabel(
+      data.startLine,
+      data.preview.loadedLineCount
+    );
   }
 
   function renderFullIndexing(): void {
@@ -288,6 +293,8 @@ export function createRenderer(context: RendererContext): Renderer {
     setControlsDisabled(true);
     fileSize.textContent = full.fileSize;
     lineCount.textContent = 'Indexing...';
+    startInput.value = String(full.startLine);
+    context.setLastSubmittedStartLine(startInput.value);
     rowsInput.value = String(full.maxLines);
     context.setLastSubmittedMaxLines(rowsInput.value);
     modified.textContent = full.lastModified;
@@ -375,33 +382,44 @@ export function createRenderer(context: RendererContext): Renderer {
       full.lineCount,
       full.lineCountProgress
     );
+    startInput.value = String(full.startLine);
+    context.setLastSubmittedStartLine(startInput.value);
     rowsInput.value = String(full.maxLines);
     context.setLastSubmittedMaxLines(rowsInput.value);
     modified.textContent = full.lastModified;
 
+    if (full.totalRows <= 0) {
+      previewStatus.textContent =
+        'No lines loaded from line ' + formatInteger(full.startLine);
+      return;
+    }
+
     if (full.maxLines === 0) {
-      previewStatus.textContent = 'Virtual full-file view';
+      previewStatus.textContent =
+        full.startLine === 1
+          ? 'Virtual full-file view'
+          : 'Virtual full-file view from line ' + formatInteger(full.startLine);
       return;
     }
 
     if (full.lineCount === null) {
-      previewStatus.textContent =
-        'Showing first ' + formatInteger(full.totalRows) + ' lines';
+      previewStatus.textContent = getVisibleRangeLabel(
+        full.startLine,
+        full.totalRows
+      );
       return;
     }
 
-    if (full.totalRows >= full.lineCount) {
+    if (full.startLine === 1 && full.totalRows >= full.lineCount) {
       previewStatus.textContent =
         'Showing all ' + formatInteger(full.lineCount) + ' lines';
       return;
     }
 
     previewStatus.textContent =
-      'Showing first ' +
-      formatInteger(full.totalRows) +
+      getVisibleRangeLabel(full.startLine, full.totalRows) +
       ' of ' +
-      formatInteger(full.lineCount) +
-      ' lines';
+      formatInteger(full.lineCount);
   }
 
   function setLineCountText(
@@ -427,6 +445,19 @@ export function createRenderer(context: RendererContext): Renderer {
   function enableRefreshWhenVisible(): void {
     const refreshButton = context.elements.refreshButton;
     refreshButton.disabled = Boolean(refreshButton.hidden);
+  }
+
+  function getVisibleRangeLabel(startLine: number, loadedLineCount: number) {
+    if (loadedLineCount <= 0) {
+      return 'No lines loaded from line ' + formatInteger(startLine);
+    }
+
+    return (
+      'Showing lines ' +
+      formatInteger(startLine) +
+      '-' +
+      formatInteger(startLine + loadedLineCount - 1)
+    );
   }
 
   function renderLimitedVirtualRows(start: number, count: number): void {

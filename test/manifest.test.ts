@@ -101,6 +101,17 @@ test('package contributes JSONL viewer as the default editor association', async
         'Automatically refresh open JSONL viewers when the underlying file changes. Disable to refresh manually from the viewer toolbar.'
     }
   );
+  assert.deepEqual(
+    packageJson.contributes?.configuration?.properties?.[
+      'quickJsonlViewer.startLine'
+    ],
+    {
+      type: 'integer',
+      default: 1,
+      minimum: 1,
+      description: 'One-based JSONL line number to start displaying from.'
+    }
+  );
 });
 
 test('package wires local test hooks, formatting, and GitHub Actions test workflow', async () => {

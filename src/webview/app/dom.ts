@@ -5,6 +5,7 @@ export interface WebviewElements {
   readonly rawContentsButton: HTMLButtonElement;
   readonly fileSize: HTMLElement;
   readonly lineCount: HTMLElement;
+  readonly startInput: HTMLInputElement;
   readonly rowsInput: HTMLInputElement;
   readonly rowsError: HTMLElement;
   readonly modified: HTMLElement;
@@ -21,6 +22,7 @@ export function collectDomElements(): WebviewElements {
     rawContentsButton: getRequiredElement('raw-contents'),
     fileSize: getRequiredElement('file-size'),
     lineCount: getRequiredElement('line-count'),
+    startInput: getRequiredElement('start-input'),
     rowsInput: getRequiredElement('rows-input'),
     rowsError: getRequiredElement('rows-error'),
     modified: getRequiredElement('modified'),
@@ -37,6 +39,7 @@ export function setControlsDisabled(
   }
   elements.refreshButton.disabled = disabled;
   elements.rawContentsButton.disabled = disabled;
+  elements.startInput.disabled = disabled;
   elements.rowsInput.disabled = disabled;
 }
 

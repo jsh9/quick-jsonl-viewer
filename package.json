@@ -95,6 +95,12 @@
           "minimum": 0,
           "description": "Number of JSONL lines to load for display. Set to 0 to index the full file and render visible rows on demand."
         },
+        "quickJsonlViewer.startLine": {
+          "type": "integer",
+          "default": 1,
+          "minimum": 1,
+          "description": "One-based JSONL line number to start displaying from."
+        },
         "quickJsonlViewer.indent": {
           "type": "integer",
           "default": 2,

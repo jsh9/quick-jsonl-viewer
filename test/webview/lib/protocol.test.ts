@@ -92,6 +92,7 @@ test('webview protocol constants list expected extension and webview message typ
     'lineCountProgress',
     'lineCountError',
     'maxLinesError',
+    'startLineError',
     'previewLoadStart',
     'previewLoadProgress',
     'fullIndexStart',
@@ -107,6 +108,7 @@ test('webview protocol constants list expected extension and webview message typ
     'refresh',
     'cancelIndex',
     'fetchRows',
+    'updateStartLine',
     'updateMaxLines'
   ]);
 });

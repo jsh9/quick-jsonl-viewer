@@ -23,6 +23,7 @@ ${getWebviewStyles()}
     <div class="info" aria-live="polite">
       <span class="info-item"><strong>Size:</strong> <span id="file-size">Loading...</span></span>
       <span class="info-item"><strong>Total lines:</strong> <span id="line-count">Counting...</span></span>
+      <label class="rows-control info-item"><strong>Start</strong> <input id="start-input" class="rows-input" type="number" min="1" step="1" inputmode="numeric" aria-describedby="rows-error"> <span>row</span></label>
       <label class="rows-control info-item"><strong>Show</strong> <input id="rows-input" class="rows-input" type="number" min="0" step="1" inputmode="numeric" aria-describedby="rows-error"> <span>rows</span></label>
       <span id="rows-error" class="rows-error" role="status"></span>
       <span class="info-item"><strong>Modified:</strong> <span id="modified">Loading...</span></span>
