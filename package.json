@@ -2,7 +2,7 @@
   "name": "quick-jsonl-viewer",
   "displayName": "Quick JSONL Viewer",
   "description": "View and preview large JSONL files in a readonly, formatted VS Code custom editor.",
-  "version": "0.0.6",
+  "version": "0.0.7",
   "publisher": "jsh9",
   "license": "MIT",
   "icon": "images/icon.png",
@@ -26,7 +26,7 @@
     "theme": "dark"
   },
   "engines": {
-    "vscode": "^1.90.0"
+    "vscode": "^1.120.0"
   },
   "categories": [
     "Other"
@@ -84,6 +84,9 @@
     "configurationDefaults": {
       "workbench.editorAssociations": {
         "*.jsonl": "quickJsonlViewer.viewer"
+      },
+      "workbench.diffEditorAssociations": {
+        "*.jsonl": "default"
       }
     },
     "configuration": {
@@ -106,20 +109,21 @@
     "menus": {
       "commandPalette": [
         {
-          "command": "quickJsonlViewer.openCurrentFile"
+          "command": "quickJsonlViewer.openCurrentFile",
+          "when": "!isInDiffEditor"
         }
       ],
       "editor/title": [
         {
           "command": "quickJsonlViewer.openCurrentFile",
-          "when": "resourceExtname == .jsonl",
+          "when": "resourceScheme == file && resourceExtname == .jsonl && !isInDiffEditor",
           "group": "navigation"
         }
       ],
       "explorer/context": [
         {
           "command": "quickJsonlViewer.openCurrentFile",
-          "when": "resourceExtname == .jsonl",
+          "when": "resourceScheme == file && resourceExtname == .jsonl",
           "group": "navigation"
         }
       ]
@@ -143,7 +147,7 @@
   "devDependencies": {
     "@types/mocha": "^10.0.10",
     "@types/node": "20.14.8",
-    "@types/vscode": "1.90.0",
+    "@types/vscode": "1.120.0",
     "@vscode/test-cli": "^0.0.12",
     "@vscode/test-electron": "^3.0.0",
     "c8": "^11.0.0",

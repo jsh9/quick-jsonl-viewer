@@ -93,6 +93,7 @@ export class FakeWebview {
 export class FakeWebviewPanel {
   public readonly webview = new FakeWebview();
   public viewColumn: number | undefined = FakeVscode.ViewColumn.One;
+  public disposed = false;
   public readonly revealCalls: Array<readonly [number, boolean]> = [];
   private readonly disposeListeners: Array<() => void> = [];
 
@@ -113,6 +114,7 @@ export class FakeWebviewPanel {
   }
 
   public dispose(): void {
+    this.disposed = true;
     for (const listener of [...this.disposeListeners]) {
       listener();
     }

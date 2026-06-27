@@ -55,7 +55,9 @@ test('openCurrentFile validates input and opens JSONL resources', async () => {
   }
 });
 
-test('openCurrentFile resolves active editor, custom tab, and diff tab URIs', async () => {
+test('openCurrentFile resolves active editor and custom tab URIs', async () => {
+  // Verifies the ordinary implicit command paths still resolve to a concrete
+  // JSONL file after diff tabs were removed from active-editor resolution.
   const harness = loadExtension();
   try {
     harness.extension.activate(createContext());
@@ -65,7 +67,6 @@ test('openCurrentFile resolves active editor, custom tab, and diff tab URIs', as
     );
     const textUri = FakeUri.file(path.join(tempDir, 'active.jsonl'));
     const customUri = FakeUri.file(path.join(tempDir, 'custom.jsonl'));
-    const modifiedUri = FakeUri.file(path.join(tempDir, 'modified.jsonl'));
 
     harness.fake.activeTextEditorUri = textUri;
     thisOwner.activeTextEditorUri = textUri;
@@ -83,14 +84,49 @@ test('openCurrentFile resolves active editor, custom tab, and diff tab URIs', as
     thisOwner.activeTabInput = harness.fake.activeTabInput;
     await openCurrentFile();
     assert.equal(harness.fake.executedCommands.at(-1)?.args[0], customUri);
+  } finally {
+    thisOwner.activeTextEditorUri = undefined;
+    thisOwner.activeTabInput = undefined;
+    harness.restore();
+  }
+});
 
+test('openCurrentFile blocks command palette use from diff tabs', async () => {
+  // Verifies implicit diff-tab commands do not collapse a side-by-side diff
+  // into the modified file, while explicit resource commands remain available.
+  const harness = loadExtension();
+  try {
+    harness.extension.activate(createContext());
+    const openCurrentFile = getCommand(
+      harness.fake,
+      'quickJsonlViewer.openCurrentFile'
+    );
+    const explicitUri = FakeUri.file(path.join(tempDir, 'direct.jsonl'));
+    const modifiedUri = FakeUri.file(path.join(tempDir, 'modified.jsonl'));
     harness.fake.activeTabInput = new FakeTabInputTextDiff(
       FakeUri.file(path.join(tempDir, 'original.jsonl')),
       modifiedUri
     );
     thisOwner.activeTabInput = harness.fake.activeTabInput;
+    harness.fake.activeTextEditorUri = modifiedUri;
+    thisOwner.activeTextEditorUri = modifiedUri;
+
     await openCurrentFile();
-    assert.equal(harness.fake.executedCommands.at(-1)?.args[0], modifiedUri);
+    assert.equal(
+      harness.fake.warnings.at(-1),
+      'Quick JSONL Viewer is not available in diff editors.'
+    );
+    assert.equal(harness.fake.executedCommands.length, 0);
+
+    await openCurrentFile(explicitUri);
+    assert.deepEqual(harness.fake.executedCommands.at(-1), {
+      command: 'vscode.openWith',
+      args: [
+        explicitUri,
+        'quickJsonlViewer.viewer',
+        FakeVscode.ViewColumn.Active
+      ]
+    });
   } finally {
     thisOwner.activeTextEditorUri = undefined;
     thisOwner.activeTabInput = undefined;
