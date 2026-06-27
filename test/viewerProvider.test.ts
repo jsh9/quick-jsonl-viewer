@@ -33,6 +33,12 @@ test('custom editor posts limited preview data after the webview is ready', asyn
     await provider.resolveCustomEditor(document, panel, {});
     assert.deepEqual(panel.webview.options, { enableScripts: true });
     assert.match(panel.webview.html, /preview &amp; value\.jsonl/);
+    // Verifies initial global auto-refresh state drives both controls before
+    // data loads, so the webview does not briefly offer the wrong action.
+    assert.match(
+      panel.webview.html,
+      /id="auto-refresh" type="checkbox" checked/
+    );
     assert.match(panel.webview.html, /id="refresh" hidden>Refresh/);
     assert.deepEqual(panel.revealCalls, [[FakeVscode.ViewColumn.One, false]]);
     assert.equal(panel.webview.messages.length, 0);
@@ -61,7 +67,7 @@ test('custom editor posts limited preview data after the webview is ready', asyn
   }
 });
 
-test('custom editor can start limited previews from a configured line', async () => {
+test('custom editor can start limited previews from a per-view line', async () => {
   const harness = loadExtension();
   const filePath = await writeFixture(
     'middle-limited.jsonl',
@@ -70,13 +76,22 @@ test('custom editor can start limited previews from a configured line', async ()
   const panel = new FakeWebviewPanel();
   try {
     harness.fake.maxLines = 2;
-    harness.fake.startLine = 3;
     const provider = activateAndGetProvider(harness);
     const uri = FakeUri.file(filePath);
     const document = await provider.openCustomDocument(uri);
 
     await provider.resolveCustomEditor(document, panel, {});
     panel.webview.receive({ type: 'ready' });
+    // Verifies Start at line begins as an editor-local default and updates via
+    // webview message without writing the removed global setting.
+    const initialData = await waitForMessage<{
+      readonly type: string;
+      readonly payload: { readonly startLine: number };
+    }>(panel, (message) => message.type === 'data');
+    assert.equal(initialData.payload.startLine, 1);
+
+    panel.webview.messages.length = 0;
+    panel.webview.receive({ type: 'updateStartLine', value: 3 });
     const data = await waitForMessage<{
       readonly type: string;
       readonly payload: {
@@ -99,8 +114,52 @@ test('custom editor can start limited previews from a configured line', async ()
       data.payload.preview.entries.map((entry) => entry.raw),
       ['{"c":3}', '{"d":4}']
     );
+    assert.equal(harness.fake.configurationUpdates.length, 0);
   } finally {
     panel.dispose();
+    harness.restore();
+  }
+});
+
+test('custom editor keeps start line local to each viewer', async () => {
+  const harness = loadExtension();
+  const filePath = await writeFixture(
+    'local-start.jsonl',
+    '{"a":1}\n{"b":2}\n{"c":3}'
+  );
+  const firstPanel = new FakeWebviewPanel();
+  const secondPanel = new FakeWebviewPanel();
+  try {
+    harness.fake.maxLines = 2;
+    const provider = activateAndGetProvider(harness);
+    const uri = FakeUri.file(filePath);
+    const firstDocument = await provider.openCustomDocument(uri);
+    await provider.resolveCustomEditor(firstDocument, firstPanel, {});
+    firstPanel.webview.receive({ type: 'ready' });
+    await waitForMessage(firstPanel, (message) => message.type === 'data');
+
+    // Regression guard: changing one viewer's start line must not leak into
+    // another viewer for the same file or write a global setting.
+    firstPanel.webview.messages.length = 0;
+    firstPanel.webview.receive({ type: 'updateStartLine', value: 2 });
+    const firstData = await waitForMessage<{
+      readonly type: string;
+      readonly payload: { readonly startLine: number };
+    }>(firstPanel, (message) => message.type === 'data');
+    assert.equal(firstData.payload.startLine, 2);
+
+    const secondDocument = await provider.openCustomDocument(uri);
+    await provider.resolveCustomEditor(secondDocument, secondPanel, {});
+    secondPanel.webview.receive({ type: 'ready' });
+    const secondData = await waitForMessage<{
+      readonly type: string;
+      readonly payload: { readonly startLine: number };
+    }>(secondPanel, (message) => message.type === 'data');
+    assert.equal(secondData.payload.startLine, 1);
+    assert.equal(harness.fake.configurationUpdates.length, 0);
+  } finally {
+    firstPanel.dispose();
+    secondPanel.dispose();
     harness.restore();
   }
 });
@@ -212,7 +271,7 @@ test('custom editor handles full indexing, row fetches, cancellation, and raw co
   }
 });
 
-test('custom editor can start indexed viewers from a configured line', async () => {
+test('custom editor can start indexed viewers from a per-view line', async () => {
   const harness = loadExtension();
   const filePath = await writeFixture(
     'middle-full.jsonl',
@@ -221,13 +280,26 @@ test('custom editor can start indexed viewers from a configured line', async () 
   const panel = new FakeWebviewPanel();
   try {
     harness.fake.maxLines = 0;
-    harness.fake.startLine = 2;
     const provider = activateAndGetProvider(harness);
     const uri = FakeUri.file(filePath);
     const document = await provider.openCustomDocument(uri);
 
     await provider.resolveCustomEditor(document, panel, {});
     panel.webview.receive({ type: 'ready' });
+    // Indexed mode has separate row-fetch math; keep the same per-view start
+    // semantics there so virtual rows map to file line numbers correctly.
+    const initialReady = await waitForMessage<{
+      readonly type: string;
+      readonly payload: {
+        readonly startLine: number;
+        readonly totalRows: number;
+      };
+    }>(panel, (message) => message.type === 'fullIndexReady');
+    assert.equal(initialReady.payload.startLine, 1);
+    assert.equal(initialReady.payload.totalRows, 3);
+
+    panel.webview.messages.length = 0;
+    panel.webview.receive({ type: 'updateStartLine', value: 2 });
     const ready = await waitForMessage<{
       readonly type: string;
       readonly payload: {
@@ -267,6 +339,7 @@ test('custom editor can start indexed viewers from a configured line', async () 
       rows.payload.entries.map((entry) => entry.raw),
       ['{"b":2}', '{"c":3}']
     );
+    assert.equal(harness.fake.configurationUpdates.length, 0);
   } finally {
     panel.dispose();
     harness.restore();
@@ -313,12 +386,10 @@ test('custom editor validates max-line messages and writes valid updates', async
     });
 
     panel.webview.receive({ type: 'updateStartLine', value: 5 });
-    await waitFor(() => harness.fake.configurationUpdates.length === 2);
-    assert.deepEqual(harness.fake.configurationUpdates[1], {
-      key: 'startLine',
-      value: 5,
-      target: FakeVscode.ConfigurationTarget.Global
-    });
+    // A valid Start at line message reloads local view state only. The sleep
+    // leaves room for accidental async configuration writes to appear.
+    await sleep(20);
+    assert.equal(harness.fake.configurationUpdates.length, 1);
   } finally {
     panel.dispose();
     harness.restore();
@@ -379,13 +450,6 @@ test('custom editor reports fetch and settings update handler failures', async (
       readonly message: string;
     }>(settingsPanel, (message) => message.type === 'maxLinesError');
     assert.equal(settingsError.message, 'settings failed');
-
-    settingsPanel.webview.receive({ type: 'updateStartLine', value: 8 });
-    const startLineError = await waitForMessage<{
-      readonly type?: unknown;
-      readonly message: string;
-    }>(settingsPanel, (message) => message.type === 'startLineError');
-    assert.equal(startLineError.message, 'settings failed');
   } finally {
     settingsPanel.dispose();
     settingsHarness.restore();
@@ -456,8 +520,11 @@ test('custom editor can disable automatic reloads and refresh manually', async (
     const uri = FakeUri.file(filePath);
     const document = await provider.openCustomDocument(uri);
     await provider.resolveCustomEditor(document, panel, {});
+    // Initial HTML must expose the checkbox unchecked and manual Refresh
+    // visible so disabled auto-refresh is controllable before first load.
     assert.match(panel.webview.html, /id="refresh">Refresh/);
     assert.doesNotMatch(panel.webview.html, /id="refresh" hidden/);
+    assert.match(panel.webview.html, /id="auto-refresh" type="checkbox">/);
     panel.webview.receive({ type: 'ready' });
     const data = await waitForMessage<{
       readonly type?: unknown;
@@ -485,11 +552,54 @@ test('custom editor can disable automatic reloads and refresh manually', async (
   }
 });
 
+test('custom editor updates auto-refresh from the webview without reloading data', async () => {
+  const harness = loadExtension();
+  const filePath = await writeFixture('checkbox-auto-refresh.jsonl', '{"a":1}');
+  const panel = new FakeWebviewPanel();
+  try {
+    // Verifies the checkbox writes the global preference but only posts
+    // control state back; treating it as data reload would clear content.
+    const provider = activateAndGetProvider(harness);
+    const uri = FakeUri.file(filePath);
+    const document = await provider.openCustomDocument(uri);
+    await provider.resolveCustomEditor(document, panel, {});
+    panel.webview.receive({ type: 'ready' });
+    await waitForMessage(panel, (message) => message.type === 'data');
+
+    panel.webview.messages.length = 0;
+    panel.webview.receive({ type: 'updateAutoRefresh', value: false });
+    await waitFor(() => harness.fake.configurationUpdates.length === 1);
+    assert.deepEqual(harness.fake.configurationUpdates[0], {
+      key: 'autoRefresh',
+      value: false,
+      target: FakeVscode.ConfigurationTarget.Global
+    });
+    const changed = await waitForMessage<{
+      readonly type?: unknown;
+      readonly autoRefresh: boolean;
+    }>(panel, (message) => message.type === 'autoRefreshChanged');
+    assert.equal(changed.autoRefresh, false);
+    assert.equal(
+      panel.webview.messages.some(
+        (message) =>
+          getMessageType(message) === 'loading' ||
+          getMessageType(message) === 'data'
+      ),
+      false
+    );
+  } finally {
+    panel.dispose();
+    harness.restore();
+  }
+});
+
 test('auto-refresh setting changes update open viewers', async () => {
   const harness = loadExtension();
   const filePath = await writeFixture('toggle-auto-refresh.jsonl', '{"a":1}');
   const panel = new FakeWebviewPanel();
   try {
+    // Verifies external setting changes are control-only messages while
+    // save/watch reload behavior still respects the current preference.
     const provider = activateAndGetProvider(harness);
     const uri = FakeUri.file(filePath);
     const document = await provider.openCustomDocument(uri);
@@ -500,11 +610,19 @@ test('auto-refresh setting changes update open viewers', async () => {
     panel.webview.messages.length = 0;
     harness.fake.autoRefresh = false;
     harness.fake.fireConfigurationChange(['quickJsonlViewer.autoRefresh']);
-    const disabledData = await waitForMessage<{
+    const disabledState = await waitForMessage<{
       readonly type?: unknown;
-      readonly payload: { readonly autoRefresh: boolean };
-    }>(panel, (message) => message.type === 'data');
-    assert.equal(disabledData.payload.autoRefresh, false);
+      readonly autoRefresh: boolean;
+    }>(panel, (message) => message.type === 'autoRefreshChanged');
+    assert.equal(disabledState.autoRefresh, false);
+    assert.equal(
+      panel.webview.messages.some(
+        (message) =>
+          getMessageType(message) === 'loading' ||
+          getMessageType(message) === 'data'
+      ),
+      false
+    );
 
     panel.webview.messages.length = 0;
     harness.fake.fireSave(uri);
@@ -518,11 +636,11 @@ test('auto-refresh setting changes update open viewers', async () => {
 
     harness.fake.autoRefresh = true;
     harness.fake.fireConfigurationChange(['quickJsonlViewer.autoRefresh']);
-    const enabledData = await waitForMessage<{
+    const enabledState = await waitForMessage<{
       readonly type?: unknown;
-      readonly payload: { readonly autoRefresh: boolean };
-    }>(panel, (message) => message.type === 'data');
-    assert.equal(enabledData.payload.autoRefresh, true);
+      readonly autoRefresh: boolean;
+    }>(panel, (message) => message.type === 'autoRefreshChanged');
+    assert.equal(enabledState.autoRefresh, true);
 
     panel.webview.messages.length = 0;
     harness.fake.fireSave(uri);

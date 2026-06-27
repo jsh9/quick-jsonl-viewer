@@ -1,7 +1,12 @@
 import * as nodeFs from 'node:fs';
 import * as path from 'node:path';
 import * as vscode from 'vscode';
-import { fetchJsonlRows, getDisplayRowCount, JsonlLineIndex } from './jsonl';
+import {
+  DEFAULT_START_LINE,
+  fetchJsonlRows,
+  getDisplayRowCount,
+  JsonlLineIndex
+} from './jsonl';
 import { FILE_RELOAD_DEBOUNCE_MS, SETTINGS_SECTION } from './constants';
 import { getHtml } from './webview/html';
 import {
@@ -48,6 +53,10 @@ export class JsonlViewerProvider implements vscode.CustomReadonlyEditorProvider<
     let abortController: AbortController | undefined;
     let fullIndex: JsonlLineIndex | undefined;
     let currentSettings = getSettings();
+    // Keep Start at line in the editor closure, not VS Code settings. The
+    // same file can be open in multiple viewers, and changing one must not
+    // move another viewer or persist into future editors.
+    let startLine = DEFAULT_START_LINE;
     let fileReloadTimer: ReturnType<typeof setTimeout> | undefined;
     let currentFileSnapshot: FileSnapshot | undefined;
     let exactLineCountCache: ExactLineCountCache | undefined;
@@ -180,7 +189,10 @@ export class JsonlViewerProvider implements vscode.CustomReadonlyEditorProvider<
         currentGeneration,
         () => generation,
         controller.signal,
-        currentSettings,
+        {
+          ...currentSettings,
+          startLine
+        },
         (index) => {
           fullIndex = index;
         },
@@ -203,6 +215,15 @@ export class JsonlViewerProvider implements vscode.CustomReadonlyEditorProvider<
           type: 'error',
           message: formatError(error)
         });
+      });
+    };
+
+    // Send the authoritative preference state without starting a data load.
+    // The webview uses this to reconcile checkbox state and Refresh visibility.
+    const postAutoRefreshChanged = async (): Promise<void> => {
+      await webviewPanel.webview.postMessage({
+        type: 'autoRefreshChanged',
+        autoRefresh: currentSettings.autoRefresh
       });
     };
 
@@ -239,11 +260,11 @@ export class JsonlViewerProvider implements vscode.CustomReadonlyEditorProvider<
       const totalRows = getDisplayRowCount(
         fullIndex.indexedLineCount,
         currentSettings.maxLines,
-        currentSettings.startLine
+        startLine
       );
       const start = clampMessageInteger(message.start, 0, totalRows);
       const count = clampMessageInteger(message.count, 0, totalRows - start);
-      const fileStart = currentSettings.startLine - 1 + start;
+      const fileStart = startLine - 1 + start;
       const rows = await fetchJsonlRows(document.uri.fsPath, fullIndex, {
         start: fileStart,
         count,
@@ -297,9 +318,43 @@ export class JsonlViewerProvider implements vscode.CustomReadonlyEditorProvider<
         return;
       }
 
-      await vscode.workspace
-        .getConfiguration(SETTINGS_SECTION)
-        .update('startLine', value, vscode.ConfigurationTarget.Global);
+      if (value === startLine) {
+        return;
+      }
+
+      startLine = value;
+      safeLoad();
+    };
+
+    const handleUpdateAutoRefresh = async (
+      message: WebviewMessage
+    ): Promise<void> => {
+      if (typeof message.value !== 'boolean') {
+        // Re-post the stored preference so a malformed webview message cannot
+        // leave the checkbox showing a value the extension did not accept.
+        await postAutoRefreshChanged();
+        return;
+      }
+
+      if (message.value !== currentSettings.autoRefresh) {
+        await vscode.workspace
+          .getConfiguration(SETTINGS_SECTION)
+          .update(
+            'autoRefresh',
+            message.value,
+            vscode.ConfigurationTarget.Global
+          );
+        currentSettings = {
+          ...currentSettings,
+          autoRefresh: message.value
+        };
+      }
+
+      if (!currentSettings.autoRefresh) {
+        clearFileReloadTimer();
+      }
+
+      await postAutoRefreshChanged();
     };
 
     disposables.push(
@@ -346,6 +401,13 @@ export class JsonlViewerProvider implements vscode.CustomReadonlyEditorProvider<
           return;
         }
 
+        if (message.type === 'updateAutoRefresh') {
+          void handleUpdateAutoRefresh(message).catch(async () => {
+            await postAutoRefreshChanged();
+          });
+          return;
+        }
+
         if (message.type === 'refresh') {
           clearFileReloadTimer();
           safeLoad();
@@ -365,16 +427,26 @@ export class JsonlViewerProvider implements vscode.CustomReadonlyEditorProvider<
 
     disposables.push(
       vscode.workspace.onDidChangeConfiguration((event) => {
-        if (
-          event.affectsConfiguration(`${SETTINGS_SECTION}.maxLines`) ||
-          event.affectsConfiguration(`${SETTINGS_SECTION}.startLine`) ||
-          event.affectsConfiguration(`${SETTINGS_SECTION}.indent`) ||
-          event.affectsConfiguration(`${SETTINGS_SECTION}.autoRefresh`)
-        ) {
+        const affectsAutoRefresh = event.affectsConfiguration(
+          `${SETTINGS_SECTION}.autoRefresh`
+        );
+        if (affectsAutoRefresh) {
+          // Auto-refresh is a global UI preference, so configuration changes
+          // update controls and pending timers without re-reading the file.
           currentSettings = getSettings();
           if (!currentSettings.autoRefresh) {
             clearFileReloadTimer();
           }
+          void postAutoRefreshChanged();
+        }
+
+        if (
+          event.affectsConfiguration(`${SETTINGS_SECTION}.maxLines`) ||
+          event.affectsConfiguration(`${SETTINGS_SECTION}.indent`)
+        ) {
+          // Row count and indentation affect rendered data, so they still
+          // reload the current viewer.
+          currentSettings = getSettings();
           safeLoad();
         }
       })

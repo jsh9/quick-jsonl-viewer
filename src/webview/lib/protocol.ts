@@ -11,6 +11,7 @@ export const EXTENSION_MESSAGE_TYPES = [
   'lineCountError',
   'maxLinesError',
   'startLineError',
+  'autoRefreshChanged',
   'previewLoadStart',
   'previewLoadProgress',
   'fullIndexStart',
@@ -28,6 +29,7 @@ export const WEBVIEW_POSTED_MESSAGE_TYPES = [
   'cancelIndex',
   'fetchRows',
   'updateStartLine',
+  'updateAutoRefresh',
   'updateMaxLines'
 ] as const;
 
@@ -136,6 +138,7 @@ export type ExtensionMessage =
   | { type: 'lineCountError'; message?: string }
   | { type: 'maxLinesError'; message?: string }
   | { type: 'startLineError'; message?: string }
+  | { type: 'autoRefreshChanged'; autoRefresh: boolean }
   | { type: 'previewLoadStart'; payload: PreviewLoadPayload }
   | { type: 'previewLoadProgress'; payload: JsonlPreviewProgress }
   | { type: 'fullIndexStart'; payload: FullIndexStartPayload }
@@ -167,6 +170,7 @@ export type WebviewPostMessage =
       mode: RenderMode;
     }
   | { type: 'updateStartLine'; value: number }
+  | { type: 'updateAutoRefresh'; value: boolean }
   | { type: 'updateMaxLines'; value: number };
 
 export interface MaxLinesValidationResult {

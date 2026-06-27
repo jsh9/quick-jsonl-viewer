@@ -17,8 +17,7 @@ export function getSettings(): ViewerSettings {
   return normalizeViewerSettings({
     maxLines: configuration.get('maxLines'),
     indent: configuration.get('indent'),
-    autoRefresh: configuration.get('autoRefresh'),
-    startLine: configuration.get('startLine')
+    autoRefresh: configuration.get('autoRefresh')
   });
 }
 

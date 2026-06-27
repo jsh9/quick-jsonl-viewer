@@ -68,6 +68,17 @@ export function getWebviewStyles(): string {
       white-space: nowrap;
     }
 
+    .auto-refresh-control {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      white-space: nowrap;
+    }
+
+    .auto-refresh-control input {
+      margin: 0;
+    }
+
     .rows-input {
       appearance: textfield;
       -moz-appearance: textfield;

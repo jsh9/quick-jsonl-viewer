@@ -12,7 +12,7 @@ import {
   JsonlPreview,
   readJsonlPreview,
   shouldUseIndexedPreview,
-  ViewerSettings
+  ViewerLoadSettings
 } from './jsonl';
 import { formatError } from './viewerProtocol';
 
@@ -59,7 +59,7 @@ export async function postJsonlData(
   generation: number,
   getLatestGeneration: () => number,
   signal: AbortSignal,
-  settings: ViewerSettings,
+  settings: ViewerLoadSettings,
   setFullIndex: (index: JsonlLineIndex) => void,
   exactLineCounts: ExactLineCountCoordinator
 ): Promise<void> {

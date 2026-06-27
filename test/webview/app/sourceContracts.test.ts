@@ -58,12 +58,19 @@ test('custom editor focuses the webview so find shortcuts work after open', asyn
   assert.match(source, /content\.focus\(\{ preventScroll: true \}\);/);
 });
 
-test('webview top bar labels use colons, separators, and Show rows wording', async () => {
+test('webview top bar labels use colons, separators, and Start/Show line wording', async () => {
   const source = await readExtensionSource();
 
+  // Locks the compact top-bar copy because it distinguishes per-view start
+  // state from the global row-count control.
   assert.match(source, /<strong>Size:<\/strong>/);
   assert.match(source, /<strong>Total lines:<\/strong>/);
-  assert.match(source, /<strong>Show<\/strong>[\s\S]*<span>rows<\/span>/);
+  assert.match(source, /<span>Start at line<\/span>[\s\S]*id="start-input"/);
+  assert.match(source, /<strong>Show<\/strong>[\s\S]*<span>lines<\/span>/);
+  assert.match(
+    source,
+    /id="auto-refresh" type="checkbox"\$\{autoRefreshChecked\}/
+  );
   assert.match(source, /<strong>Modified:<\/strong>/);
   assert.match(source, /<span id="preview-status" class="info-item"><\/span>/);
   assert.match(
@@ -236,9 +243,9 @@ test('line counts are cached across settings-only reloads', async () => {
       source
     )?.[1] ?? '';
 
-  // Verifies row-count settings can rerender the viewer without restarting
-  // the file-scoped exact count. Only file snapshot changes should invalidate
-  // cached or in-flight line-count work.
+  // Verifies data-affecting settings can rerender without restarting the
+  // file-scoped count, while auto-refresh only reconciles controls. Only file
+  // snapshot changes should invalidate cached or in-flight line-count work.
   assert.match(
     source,
     /interface FileSnapshot \{[\s\S]*?readonly size: number;[\s\S]*?readonly mtimeMs: number;/
@@ -252,6 +259,7 @@ test('line counts are cached across settings-only reloads', async () => {
     /let exactLineCountRequest: ExactLineCountRequest \| undefined;/
   );
   assert.match(configurationReload, /safeLoad\(\);/);
+  assert.match(configurationReload, /postAutoRefreshChanged\(\);/);
   assert.doesNotMatch(
     configurationReload,
     /invalidateExactLineCount|abortExactLineCount|ensureExactLineCount/
@@ -408,6 +416,8 @@ test('webview avoids unsafe HTML injection APIs', async () => {
 test('webview handles the expected extension message protocol', async () => {
   const source = await readExtensionSource();
 
+  // Keeps source-level protocol handling in sync with shared constants; the
+  // auto-refresh messages are state-only and should not be dropped silently.
   for (const messageType of [
     'loading',
     'data',
@@ -415,6 +425,8 @@ test('webview handles the expected extension message protocol', async () => {
     'lineCountProgress',
     'lineCountError',
     'maxLinesError',
+    'startLineError',
+    'autoRefreshChanged',
     'previewLoadStart',
     'previewLoadProgress',
     'fullIndexStart',
@@ -433,6 +445,8 @@ test('webview handles the expected extension message protocol', async () => {
     'refresh',
     'cancelIndex',
     'fetchRows',
+    'updateStartLine',
+    'updateAutoRefresh',
     'updateMaxLines'
   ]) {
     assert.match(source, new RegExp(`type: '${postedType}'`));
@@ -472,6 +486,8 @@ test('webview rows input validates, de-duplicates, and posts numeric updates', a
 test('webview exposes all render modes and preserves virtual-scroll helpers', async () => {
   const source = await readExtensionSource();
 
+  // Locks initial server-rendered auto-refresh controls because they are
+  // visible before any extension message can reconcile checkbox state.
   assert.match(source, /data-mode="pretty"/);
   assert.match(source, /data-mode="wrappedRaw"/);
   assert.match(source, /data-mode="rawLine"/);
@@ -481,7 +497,15 @@ test('webview exposes all render modes and preserves virtual-scroll helpers', as
   );
   assert.match(
     source,
+    /const autoRefreshChecked = autoRefresh \? ' checked' : '';/
+  );
+  assert.match(
+    source,
     /id="refresh"\$\{refreshButtonHidden\}>Refresh<\/button>/
+  );
+  assert.match(
+    source,
+    /id="auto-refresh" type="checkbox"\$\{autoRefreshChecked\}>/
   );
   assert.match(source, /id="raw-contents"/);
   assert.match(source, /function renderLimitedVirtualViewer\(\) \{/);
@@ -498,13 +522,19 @@ test('webview exposes all render modes and preserves virtual-scroll helpers', as
 test('manual refresh button is shown only when auto-refresh is disabled', async () => {
   const source = await readExtensionSource();
 
+  // Verifies every auto-refresh source updates both controls through one path,
+  // so config changes and data loads cannot diverge checkbox/Refresh state.
+  assert.match(
+    source,
+    /autoRefreshInput\.addEventListener\('change'[\s\S]*?type: 'updateAutoRefresh'/
+  );
   assert.match(
     source,
     /refreshButton\.addEventListener\('click'[\s\S]*?type: 'refresh'/
   );
   assert.match(
     source,
-    /function updateRefreshButton\(autoRefresh[\s\S]*?refreshButton\.hidden = autoRefresh;/
+    /function updateAutoRefreshControls\(autoRefresh[\s\S]*?autoRefreshInput\.checked = autoRefresh;[\s\S]*?refreshButton\.hidden = autoRefresh;/
   );
   assert.match(
     source,
@@ -512,18 +542,22 @@ test('manual refresh button is shown only when auto-refresh is disabled', async 
   );
   assert.match(
     source,
-    /if \(message\.type === 'data'\) \{[\s\S]*?updateRefreshButton\(message\.payload\.autoRefresh\);/
+    /if \(message\.type === 'autoRefreshChanged'\) \{[\s\S]*?updateAutoRefreshControls\(message\.autoRefresh\);/
   );
   assert.match(
     source,
-    /if \(message\.type === 'previewLoadStart'\) \{[\s\S]*?updateRefreshButton\(message\.payload\.autoRefresh\);/
+    /if \(message\.type === 'data'\) \{[\s\S]*?updateAutoRefreshControls\(message\.payload\.autoRefresh\);/
   );
   assert.match(
     source,
-    /if \(message\.type === 'fullIndexStart'\) \{[\s\S]*?updateRefreshButton\(message\.payload\.autoRefresh\);/
+    /if \(message\.type === 'previewLoadStart'\) \{[\s\S]*?updateAutoRefreshControls\(message\.payload\.autoRefresh\);/
   );
   assert.match(
     source,
-    /if \(message\.type === 'fullIndexReady'\) \{[\s\S]*?updateRefreshButton\(message\.payload\.autoRefresh\);/
+    /if \(message\.type === 'fullIndexStart'\) \{[\s\S]*?updateAutoRefreshControls\(message\.payload\.autoRefresh\);/
+  );
+  assert.match(
+    source,
+    /if \(message\.type === 'fullIndexReady'\) \{[\s\S]*?updateAutoRefreshControls\(message\.payload\.autoRefresh\);/
   );
 });

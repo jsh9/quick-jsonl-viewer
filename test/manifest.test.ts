@@ -141,16 +141,13 @@ test('package contributes JSONL viewer as the default editor association', async
         'Automatically refresh open JSONL viewers when the underlying file changes. Disable to refresh manually from the viewer toolbar.'
     }
   );
-  assert.deepEqual(
+  // Guards the public settings surface: Start at line is per-view state, so
+  // existing user/workspace quickJsonlViewer.startLine values are ignored.
+  assert.equal(
     packageJson.contributes?.configuration?.properties?.[
       'quickJsonlViewer.startLine'
     ],
-    {
-      type: 'integer',
-      default: 1,
-      minimum: 1,
-      description: 'One-based JSONL line number to start displaying from.'
-    }
+    undefined
   );
 });
 

@@ -5,6 +5,7 @@ export function getHtml(fileName: string, autoRefresh = true): string {
   const nonce = getNonce();
   const escapedTitle = escapeHtml(fileName);
   const refreshButtonHidden = autoRefresh ? ' hidden' : '';
+  const autoRefreshChecked = autoRefresh ? ' checked' : '';
 
   /* c8 ignore start -- Embedded webview browser code is covered by source-contract tests until it is split into executable modules. */
   const html = /* html */ `<!DOCTYPE html>
@@ -23,8 +24,9 @@ ${getWebviewStyles()}
     <div class="info" aria-live="polite">
       <span class="info-item"><strong>Size:</strong> <span id="file-size">Loading...</span></span>
       <span class="info-item"><strong>Total lines:</strong> <span id="line-count">Counting...</span></span>
-      <label class="rows-control info-item"><strong>Start</strong> <input id="start-input" class="rows-input" type="number" min="1" step="1" inputmode="numeric" aria-describedby="rows-error"> <span>row</span></label>
-      <label class="rows-control info-item"><strong>Show</strong> <input id="rows-input" class="rows-input" type="number" min="0" step="1" inputmode="numeric" aria-describedby="rows-error"> <span>rows</span></label>
+      <label class="rows-control info-item"><span>Start at line</span> <input id="start-input" class="rows-input" type="number" min="1" step="1" inputmode="numeric" aria-describedby="rows-error"></label>
+      <label class="rows-control info-item"><strong>Show</strong> <input id="rows-input" class="rows-input" type="number" min="0" step="1" inputmode="numeric" aria-describedby="rows-error"> <span>lines</span></label>
+      <label class="auto-refresh-control info-item"><input id="auto-refresh" type="checkbox"${autoRefreshChecked}> <span>Auto-refresh</span></label>
       <span id="rows-error" class="rows-error" role="status"></span>
       <span class="info-item"><strong>Modified:</strong> <span id="modified">Loading...</span></span>
       <span id="preview-status" class="info-item"></span>

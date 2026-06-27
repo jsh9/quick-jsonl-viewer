@@ -4,7 +4,6 @@ import {
   DEFAULT_AUTO_REFRESH,
   DEFAULT_INDENT,
   DEFAULT_MAX_LINES,
-  DEFAULT_START_LINE,
   INDEXED_PREVIEW_LINE_THRESHOLD,
   getDisplayRowCount,
   normalizeViewerSettings,
@@ -12,18 +11,18 @@ import {
 } from '../../src/jsonl/settings';
 
 test('settings validation falls back for invalid numbers', () => {
+  // Start line is intentionally absent here; it is editor-local state, so
+  // global settings normalization must not accept or persist it.
   assert.deepEqual(
     normalizeViewerSettings({
       maxLines: -1,
       indent: 0,
-      autoRefresh: 'no',
-      startLine: 0
+      autoRefresh: 'no'
     }),
     {
       maxLines: DEFAULT_MAX_LINES,
       indent: DEFAULT_INDENT,
-      autoRefresh: DEFAULT_AUTO_REFRESH,
-      startLine: DEFAULT_START_LINE
+      autoRefresh: DEFAULT_AUTO_REFRESH
     }
   );
 
@@ -31,14 +30,12 @@ test('settings validation falls back for invalid numbers', () => {
     normalizeViewerSettings({
       maxLines: 0,
       indent: 4,
-      autoRefresh: false,
-      startLine: 10
+      autoRefresh: false
     }),
     {
       maxLines: 0,
       indent: 4,
-      autoRefresh: false,
-      startLine: 10
+      autoRefresh: false
     }
   );
 });

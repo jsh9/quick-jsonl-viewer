@@ -34,6 +34,7 @@ export function createWebviewApp(
   const modeButtons = elements.modeButtons;
   const refreshButton = elements.refreshButton;
   const rawContentsButton = elements.rawContentsButton;
+  const autoRefreshInput = elements.autoRefreshInput;
   const startInput = elements.startInput;
   const rowsInput = elements.rowsInput;
   const rowsError = elements.rowsError;
@@ -139,6 +140,13 @@ export function createWebviewApp(
     vscode.postMessage({ type: 'refresh' });
   });
 
+  autoRefreshInput.addEventListener('change', () => {
+    vscode.postMessage({
+      type: 'updateAutoRefresh',
+      value: autoRefreshInput.checked
+    });
+  });
+
   rowsInput.addEventListener('keydown', (event) => {
     if (event.key === 'Enter') {
       event.preventDefault();
@@ -187,7 +195,7 @@ export function createWebviewApp(
 
       if (message.type === 'data') {
         viewState = 'limited';
-        updateRefreshButton(message.payload.autoRefresh);
+        updateAutoRefreshControls(message.payload.autoRefresh);
         data = withLineCountState(message.payload);
         full = null;
         previewLoad = null;
@@ -266,9 +274,16 @@ export function createWebviewApp(
         return;
       }
 
+      if (message.type === 'autoRefreshChanged') {
+        // Preference-only updates should not disturb current render state; the
+        // provider sends them when checkbox/config changes need control sync.
+        updateAutoRefreshControls(message.autoRefresh);
+        return;
+      }
+
       if (message.type === 'previewLoadStart') {
         viewState = 'previewLoading';
-        updateRefreshButton(message.payload.autoRefresh);
+        updateAutoRefreshControls(message.payload.autoRefresh);
         data = null;
         full = null;
         previewLoad = message.payload;
@@ -292,7 +307,7 @@ export function createWebviewApp(
 
       if (message.type === 'fullIndexStart') {
         viewState = 'fullIndexing';
-        updateRefreshButton(message.payload.autoRefresh);
+        updateAutoRefreshControls(message.payload.autoRefresh);
         data = null;
         full = withLineCountState({
           ...message.payload,
@@ -323,7 +338,7 @@ export function createWebviewApp(
 
       if (message.type === 'fullIndexReady') {
         viewState = 'fullReady';
-        updateRefreshButton(message.payload.autoRefresh);
+        updateAutoRefreshControls(message.payload.autoRefresh);
         full = withLineCountState(message.payload);
         fullProgress = null;
         resetVirtualMeasurements();
@@ -452,7 +467,11 @@ export function createWebviewApp(
     }
   }
 
-  function updateRefreshButton(autoRefresh: boolean): void {
+  // Keep the checkbox and manual Refresh button derived from one state value.
+  // Settings can change outside this webview, so both controls must reconcile
+  // from provider messages instead of only the local change event.
+  function updateAutoRefreshControls(autoRefresh: boolean): void {
+    autoRefreshInput.checked = autoRefresh;
     refreshButton.hidden = autoRefresh;
   }
 

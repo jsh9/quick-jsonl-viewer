@@ -10,6 +10,9 @@ export interface ViewerSettings {
   readonly maxLines: number;
   readonly indent: number;
   readonly autoRefresh: boolean;
+}
+
+export interface ViewerLoadSettings extends ViewerSettings {
   readonly startLine: number;
 }
 
@@ -17,13 +20,11 @@ export function normalizeViewerSettings(input: {
   readonly maxLines?: unknown;
   readonly indent?: unknown;
   readonly autoRefresh?: unknown;
-  readonly startLine?: unknown;
 }): ViewerSettings {
   return {
     maxLines: normalizeInteger(input.maxLines, DEFAULT_MAX_LINES, 0),
     indent: normalizeInteger(input.indent, DEFAULT_INDENT, 1),
-    autoRefresh: normalizeBoolean(input.autoRefresh, DEFAULT_AUTO_REFRESH),
-    startLine: normalizeInteger(input.startLine, DEFAULT_START_LINE, 1)
+    autoRefresh: normalizeBoolean(input.autoRefresh, DEFAULT_AUTO_REFRESH)
   };
 }
 

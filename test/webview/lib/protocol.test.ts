@@ -85,6 +85,8 @@ test('webview max-lines submission uses the defensive fallback message', () => {
 });
 
 test('webview protocol constants list expected extension and webview message types', () => {
+  // Locks the two-way message surface so auto-refresh remains a state-only
+  // control update and Start at line remains a posted view message.
   assert.deepEqual(EXTENSION_MESSAGE_TYPES, [
     'loading',
     'data',
@@ -93,6 +95,7 @@ test('webview protocol constants list expected extension and webview message typ
     'lineCountError',
     'maxLinesError',
     'startLineError',
+    'autoRefreshChanged',
     'previewLoadStart',
     'previewLoadProgress',
     'fullIndexStart',
@@ -109,6 +112,7 @@ test('webview protocol constants list expected extension and webview message typ
     'cancelIndex',
     'fetchRows',
     'updateStartLine',
+    'updateAutoRefresh',
     'updateMaxLines'
   ]);
 });
