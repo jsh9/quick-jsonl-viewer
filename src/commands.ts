@@ -2,7 +2,18 @@ import * as path from 'node:path';
 import * as vscode from 'vscode';
 import { SAMPLE_JSONL_PATHS, VIEW_TYPE } from './constants';
 
+const DIFF_EDITOR_WARNING =
+  'Quick JSONL Viewer is not available in diff editors.';
+
 export async function openJsonlViewer(resource?: vscode.Uri): Promise<void> {
+  // Diff tabs expose a modified URI, but opening that URI here would replace
+  // the native side-by-side review. Block only implicit command-palette use so
+  // explicit Explorer/editor URI invocations can still opt into the viewer.
+  if (!resource && isActiveTextDiffEditor()) {
+    void vscode.window.showWarningMessage(DIFF_EDITOR_WARNING);
+    return;
+  }
+
   const uri = resource ?? getActiveEditorUri();
 
   if (!uri) {
@@ -59,11 +70,12 @@ function getActiveEditorUri(): vscode.Uri | undefined {
     return input.uri;
   }
 
-  if (input instanceof vscode.TabInputTextDiff) {
-    return input.modified;
-  }
-
   return undefined;
+}
+
+function isActiveTextDiffEditor(): boolean {
+  const input = vscode.window.tabGroups.activeTabGroup.activeTab?.input;
+  return input instanceof vscode.TabInputTextDiff;
 }
 
 function isJsonlFile(uri: vscode.Uri): boolean {

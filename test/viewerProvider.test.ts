@@ -2,6 +2,7 @@ import * as assert from 'node:assert/strict';
 import * as path from 'node:path';
 import { test } from 'node:test';
 import {
+  FakeTabInputTextDiff,
   FakeUri,
   FakeVscode,
   FakeWebviewPanel,
@@ -10,6 +11,7 @@ import {
   loadExtension,
   sleep,
   tempDir,
+  thisOwner,
   waitFor,
   waitForMessage,
   writeFixture
@@ -661,6 +663,37 @@ test('custom editor reports unsupported schemes and missing files', async () => 
     assert.match(missingError.message, /ENOENT/);
     missingPanel.dispose();
   } finally {
+    harness.restore();
+  }
+});
+
+test('custom editor opens requested files even when a matching diff is active', async () => {
+  // Verifies explicit viewer opens are honored while a matching diff is active;
+  // native diff handling is owned by VS Code's diff editor association.
+  const harness = loadExtension();
+  const panel = new FakeWebviewPanel();
+  try {
+    const provider = activateAndGetProvider(harness);
+    const originalUri = FakeUri.file(path.join(tempDir, 'original.jsonl'));
+    const modifiedUri = FakeUri.file(
+      await writeFixture('modified.jsonl', '{"a":1}')
+    );
+    harness.fake.activeTabInput = new FakeTabInputTextDiff(
+      originalUri,
+      modifiedUri
+    );
+    thisOwner.activeTabInput = harness.fake.activeTabInput;
+    const document = await provider.openCustomDocument(modifiedUri);
+
+    await provider.resolveCustomEditor(document, panel, {});
+
+    assert.equal(panel.disposed, false);
+    assert.deepEqual(panel.webview.options, { enableScripts: true });
+    assert.match(panel.webview.html, /id="content"/);
+    assert.equal(harness.fake.executedCommands.length, 0);
+  } finally {
+    panel.dispose();
+    thisOwner.activeTabInput = undefined;
     harness.restore();
   }
 });

@@ -45,6 +45,8 @@ It is hosted both on VS Code marketplace and Open VSX:
 
 Open any `.jsonl` file in VS Code and Quick JSONL Viewer opens it with the custom viewer by default.
 
+Git staged and unstaged JSONL diffs stay in VS Code's native diff editor.
+
 You can also run `Quick JSONL Viewer: Open in Quick JSONL Viewer` from the command palette, the editor title menu, or the Explorer context menu for a `.jsonl` file.
 
 Use `Ctrl+F` on Windows/Linux or `Cmd+F` on macOS to search text in the rendered viewer contents. In indexed virtual views, Find searches the rows currently rendered by the viewport plus the viewer's small overscan buffer; scroll to search another range.

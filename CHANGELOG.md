@@ -2,6 +2,10 @@
 
 All notable changes to Quick JSONL Viewer are documented in this file.
 
+## 0.0.7
+
+- Keep JSONL diffs in VS Code's native diff editor while continuing to open JSONL files in Quick JSONL Viewer.
+
 ## 0.0.6
 
 - Add an info-bar separator before the rendered preview status text.
