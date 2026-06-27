@@ -38,26 +38,6 @@ export class JsonlViewerProvider implements vscode.CustomReadonlyEditorProvider<
     webviewPanel: vscode.WebviewPanel,
     _token: vscode.CancellationToken
   ): Promise<void> {
-    // VS Code can still ask this custom editor to resolve a diff side before
-    // applying diffEditorAssociations. Dispose the accidental webview and
-    // reopen the exact original/modified pair to preserve native diff state.
-    const activeTextDiff = getActiveTextDiffForDocument(document.uri);
-    if (activeTextDiff) {
-      // Capture the target column before disposal because VS Code owns the
-      // panel lifecycle after dispose; the reopened diff still needs to land
-      // where the accidental custom editor was created.
-      const viewColumn = webviewPanel.viewColumn ?? vscode.ViewColumn.Active;
-      webviewPanel.dispose();
-      await vscode.commands.executeCommand(
-        'vscode.diff',
-        activeTextDiff.original,
-        activeTextDiff.modified,
-        undefined,
-        { viewColumn }
-      );
-      return;
-    }
-
     webviewPanel.webview.options = {
       enableScripts: true
     };
@@ -398,22 +378,4 @@ export class JsonlViewerProvider implements vscode.CustomReadonlyEditorProvider<
 
     safeLoad();
   }
-}
-
-function getActiveTextDiffForDocument(
-  uri: vscode.Uri
-): vscode.TabInputTextDiff | undefined {
-  const input = vscode.window.tabGroups.activeTabGroup.activeTab?.input;
-  if (!(input instanceof vscode.TabInputTextDiff)) {
-    return undefined;
-  }
-
-  if (
-    input.original.toString() === uri.toString() ||
-    input.modified.toString() === uri.toString()
-  ) {
-    return input;
-  }
-
-  return undefined;
 }

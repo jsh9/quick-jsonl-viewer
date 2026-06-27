@@ -423,9 +423,9 @@ test('custom editor reports unsupported schemes and missing files', async () => 
   }
 });
 
-test('custom editor reopens matching active text diffs with VS Code diff editor', async () => {
-  // Verifies the fallback path for VS Code resolving this custom editor inside
-  // a diff: the empty webview is discarded and the native diff pair is restored.
+test('custom editor opens requested files even when a matching diff is active', async () => {
+  // Verifies explicit viewer opens are honored while a matching diff is active;
+  // native diff handling is owned by VS Code's diff editor association.
   const harness = loadExtension();
   const panel = new FakeWebviewPanel();
   try {
@@ -443,19 +443,12 @@ test('custom editor reopens matching active text diffs with VS Code diff editor'
 
     await provider.resolveCustomEditor(document, panel, {});
 
-    assert.equal(panel.disposed, true);
-    assert.deepEqual(panel.webview.options, undefined);
-    assert.equal(panel.webview.html, '');
-    assert.deepEqual(harness.fake.executedCommands.at(-1), {
-      command: 'vscode.diff',
-      args: [
-        originalUri,
-        modifiedUri,
-        undefined,
-        { viewColumn: FakeVscode.ViewColumn.One }
-      ]
-    });
+    assert.equal(panel.disposed, false);
+    assert.deepEqual(panel.webview.options, { enableScripts: true });
+    assert.match(panel.webview.html, /id="content"/);
+    assert.equal(harness.fake.executedCommands.length, 0);
   } finally {
+    panel.dispose();
     thisOwner.activeTabInput = undefined;
     harness.restore();
   }

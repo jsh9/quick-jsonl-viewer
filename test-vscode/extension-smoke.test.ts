@@ -77,6 +77,35 @@ suite('Quick JSONL Viewer VS Code smoke tests', () => {
     assert.equal(input.uri.toString(), uri.toString());
   });
 
+  test('opens explicit JSONL viewer command while matching Git diff is active', async function () {
+    // Verifies provider resolution honors explicit resource opens even when the
+    // active Git diff contains that file; native diff ownership stays separate.
+    this.timeout(10_000);
+    await vscode.commands.executeCommand('workbench.action.closeAllEditors');
+
+    const { repoDir, fileUri } = await createGitJsonlFixture();
+    const repository = await openGitRepository(repoDir);
+    await fs.writeFile(fileUri.fsPath, '{"a":2}\n', 'utf8');
+
+    await waitFor(async () => {
+      await repository.status();
+      return hasChange(repository.state.workingTreeChanges, fileUri);
+    });
+
+    await vscode.commands.executeCommand('git.openChange', fileUri);
+
+    await waitFor(() => isGitTextDiffFor(fileUri));
+    assertGitTextDiffFor(fileUri);
+
+    await vscode.commands.executeCommand(
+      'quickJsonlViewer.openCurrentFile',
+      fileUri
+    );
+
+    await waitFor(() => isCustomViewerFor(fileUri));
+    assertCustomViewerFor(fileUri);
+  });
+
   test('opens unstaged Git JSONL diffs with VS Code text diff editor', async function () {
     // Verifies Git's unstaged change command keeps JSONL review in the native
     // diff editor, covering the integration path manifest-only tests miss.
@@ -192,6 +221,20 @@ function assertGitTextDiffFor(uri: vscode.Uri): void {
   assert.ok(!(input instanceof vscode.TabInputCustom));
   assert.ok(diffIncludesUri(input, uri));
   assert.ok(diffIncludesGitUri(input));
+}
+
+function isCustomViewerFor(uri: vscode.Uri): boolean {
+  const input = vscode.window.tabGroups.activeTabGroup.activeTab?.input;
+  return (
+    input instanceof vscode.TabInputCustom &&
+    input.uri.toString() === uri.toString()
+  );
+}
+
+function assertCustomViewerFor(uri: vscode.Uri): void {
+  const input = vscode.window.tabGroups.activeTabGroup.activeTab?.input;
+  assert.ok(input instanceof vscode.TabInputCustom);
+  assert.equal(input.uri.toString(), uri.toString());
 }
 
 function diffIncludesUri(
