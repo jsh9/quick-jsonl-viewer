@@ -65,7 +65,10 @@ test('webview top bar labels use colons, separators, and Start/Show line wording
   // state from the global row-count control.
   assert.match(source, /<strong>Size:<\/strong>/);
   assert.match(source, /<strong>Total lines:<\/strong>/);
-  assert.match(source, /<span>Start at line<\/span>[\s\S]*id="start-input"/);
+  assert.match(
+    source,
+    /<strong>Start at line<\/strong>[\s\S]*id="start-input"/
+  );
   assert.match(source, /<strong>Show<\/strong>[\s\S]*<span>lines<\/span>/);
   assert.match(
     source,

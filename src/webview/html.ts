@@ -32,7 +32,7 @@ ${getWebviewStyles()}
     <div class="info" aria-live="polite">
       <span class="info-item"><strong>Size:</strong> <span id="file-size">Loading...</span></span>
       <span class="info-item"><strong>Total lines:</strong> <span id="line-count">Counting...</span></span>
-      <label class="rows-control info-item"><span>Start at line</span> <input id="start-input" class="rows-input" type="number" min="1" step="1" inputmode="numeric" aria-describedby="rows-error"></label>
+      <label class="rows-control info-item"><strong>Start at line</strong> <input id="start-input" class="rows-input" type="number" min="1" step="1" inputmode="numeric" aria-describedby="rows-error"></label>
       <label class="rows-control info-item"><strong>Show</strong> <input id="rows-input" class="rows-input" type="number" min="0" step="1" inputmode="numeric" aria-describedby="rows-error"> <span>lines</span></label>
       <label class="preference-control info-item"><input id="auto-refresh" type="checkbox"${autoRefreshChecked}> <span>Auto-refresh</span></label>
       <label class="preference-control info-item"><input id="indent-guides" type="checkbox"${indentGuidesChecked}> <span>Indent guides</span></label>
