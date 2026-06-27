@@ -141,6 +141,16 @@ test('package contributes JSONL viewer as the default editor association', async
         'Automatically refresh open JSONL viewers when the underlying file changes. Disable to refresh manually from the viewer toolbar.'
     }
   );
+  assert.deepEqual(
+    packageJson.contributes?.configuration?.properties?.[
+      'quickJsonlViewer.indentGuides'
+    ],
+    {
+      type: 'boolean',
+      default: true,
+      description: 'Show vertical indentation guides in Pretty print mode.'
+    }
+  );
   // Guards the public settings surface: Start at line is per-view state, so
   // existing user/workspace quickJsonlViewer.startLine values are ignored.
   assert.equal(

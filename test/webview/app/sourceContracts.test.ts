@@ -52,7 +52,7 @@ test('custom editor focuses the webview so find shortcuts work after open', asyn
 
   assert.match(
     source,
-    /webviewPanel\.webview\.html = getHtml\(\s*path\.basename\(document\.uri\.fsPath\),\s*currentSettings\.autoRefresh\s*\);\s*webviewPanel\.reveal\(webviewPanel\.viewColumn, false\);/
+    /webviewPanel\.webview\.html = getHtml\(\s*path\.basename\(document\.uri\.fsPath\),\s*currentSettings\.autoRefresh,\s*currentSettings\.indentGuides\s*\);\s*webviewPanel\.reveal\(webviewPanel\.viewColumn, false\);/
   );
   assert.match(source, /<main id="content" tabindex="-1">/);
   assert.match(source, /content\.focus\(\{ preventScroll: true \}\);/);
@@ -70,6 +70,10 @@ test('webview top bar labels use colons, separators, and Start/Show line wording
   assert.match(
     source,
     /id="auto-refresh" type="checkbox"\$\{autoRefreshChecked\}/
+  );
+  assert.match(
+    source,
+    /id="indent-guides" type="checkbox"\$\{indentGuidesChecked\}/
   );
   assert.match(source, /<strong>Modified:<\/strong>/);
   assert.match(source, /<span id="preview-status" class="info-item"><\/span>/);
@@ -131,7 +135,22 @@ test('pretty-print JSON blocks expose nested collapse controls', async () => {
     source,
     /toggleJsonBlock\(entry, rowMode, virtualized, rowIndex, lineIndex\)/
   );
+  assert.match(source, /function renderPrettyJsonPrefix\(/);
+  assert.match(source, /function countLeadingSpaces\(value: string\)/);
+  assert.match(
+    source,
+    /const leadingSpaces = countLeadingSpaces\(lineText\);[\s\S]*?const codeText = lineText\.slice\(leadingSpaces\);[\s\S]*?line\.append\(renderPrettyJsonPrefix\(leadingSpaces, getCurrentIndent\(\)\)\);/
+  );
+  assert.match(source, /appendHighlightedJson\(code, codeText\);/);
   assert.match(source, /\.pretty-json-line \{[\s\S]*?display: flex;/);
+  assert.match(
+    source,
+    /\.pretty-json-prefix \{[\s\S]*?background-repeat: repeat-x;/
+  );
+  assert.match(
+    source,
+    /\.indent-guides-enabled \.pretty-json-prefix \{[\s\S]*?repeating-linear-gradient/
+  );
 });
 
 test('rows input rejects empty values before posting maxLines updates', async () => {
@@ -416,8 +435,8 @@ test('webview avoids unsafe HTML injection APIs', async () => {
 test('webview handles the expected extension message protocol', async () => {
   const source = await readExtensionSource();
 
-  // Keeps source-level protocol handling in sync with shared constants; the
-  // auto-refresh messages are state-only and should not be dropped silently.
+  // Keeps source-level protocol handling in sync with shared constants;
+  // preference messages are state-only and should not be dropped silently.
   for (const messageType of [
     'loading',
     'data',
@@ -427,6 +446,7 @@ test('webview handles the expected extension message protocol', async () => {
     'maxLinesError',
     'startLineError',
     'autoRefreshChanged',
+    'indentGuidesChanged',
     'previewLoadStart',
     'previewLoadProgress',
     'fullIndexStart',
@@ -447,6 +467,7 @@ test('webview handles the expected extension message protocol', async () => {
     'fetchRows',
     'updateStartLine',
     'updateAutoRefresh',
+    'updateIndentGuides',
     'updateMaxLines'
   ]) {
     assert.match(source, new RegExp(`type: '${postedType}'`));
@@ -486,8 +507,8 @@ test('webview rows input validates, de-duplicates, and posts numeric updates', a
 test('webview exposes all render modes and preserves virtual-scroll helpers', async () => {
   const source = await readExtensionSource();
 
-  // Locks initial server-rendered auto-refresh controls because they are
-  // visible before any extension message can reconcile checkbox state.
+  // Locks initial server-rendered preference controls because they are visible
+  // before any extension message can reconcile checkbox state.
   assert.match(source, /data-mode="pretty"/);
   assert.match(source, /data-mode="wrappedRaw"/);
   assert.match(source, /data-mode="rawLine"/);
@@ -501,11 +522,24 @@ test('webview exposes all render modes and preserves virtual-scroll helpers', as
   );
   assert.match(
     source,
+    /const indentGuidesChecked = indentGuides \? ' checked' : '';/
+  );
+  assert.match(
+    source,
+    /const indentGuidesClass = indentGuides[\s\S]*\? ' class="indent-guides-enabled"'[\s\S]*: '';/
+  );
+  assert.match(source, /<body\$\{indentGuidesClass\}>/);
+  assert.match(
+    source,
     /id="refresh"\$\{refreshButtonHidden\}>Refresh<\/button>/
   );
   assert.match(
     source,
     /id="auto-refresh" type="checkbox"\$\{autoRefreshChecked\}>/
+  );
+  assert.match(
+    source,
+    /id="indent-guides" type="checkbox"\$\{indentGuidesChecked\}>/
   );
   assert.match(source, /id="raw-contents"/);
   assert.match(source, /function renderLimitedVirtualViewer\(\) \{/);
@@ -517,6 +551,41 @@ test('webview exposes all render modes and preserves virtual-scroll helpers', as
     /function renderVirtualRows\(start, entries, totalRows, rowMode\) \{/
   );
   assert.match(source, /function measureRenderedRows\(rowMode = mode\) \{/);
+});
+
+test('indent guides checkbox updates render state without reloading data', async () => {
+  const source = await readExtensionSource();
+
+  // Verifies the global preference toggles checkbox and CSS state only, so
+  // existing Pretty print rows update without a data reload.
+  assert.match(
+    source,
+    /indentGuidesInput\.addEventListener\('change'[\s\S]*?type: 'updateIndentGuides'/
+  );
+  assert.match(
+    source,
+    /function updateIndentGuidesControls\(indentGuides[\s\S]*?indentGuidesInput\.checked = indentGuides;[\s\S]*?document\.body\.classList\.toggle\('indent-guides-enabled', indentGuides\);/
+  );
+  assert.match(
+    source,
+    /if \(message\.type === 'indentGuidesChanged'\) \{[\s\S]*?updateIndentGuidesControls\(message\.indentGuides\);/
+  );
+  assert.match(
+    source,
+    /if \(message\.type === 'data'\) \{[\s\S]*?updateIndentGuidesControls\(message\.payload\.indentGuides\);/
+  );
+  assert.match(
+    source,
+    /if \(message\.type === 'previewLoadStart'\) \{[\s\S]*?updateIndentGuidesControls\(message\.payload\.indentGuides\);/
+  );
+  assert.match(
+    source,
+    /if \(message\.type === 'fullIndexStart'\) \{[\s\S]*?updateIndentGuidesControls\(message\.payload\.indentGuides\);/
+  );
+  assert.match(
+    source,
+    /if \(message\.type === 'fullIndexReady'\) \{[\s\S]*?updateIndentGuidesControls\(message\.payload\.indentGuides\);/
+  );
 });
 
 test('manual refresh button is shown only when auto-refresh is disabled', async () => {

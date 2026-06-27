@@ -12,6 +12,7 @@ export const EXTENSION_MESSAGE_TYPES = [
   'maxLinesError',
   'startLineError',
   'autoRefreshChanged',
+  'indentGuidesChanged',
   'previewLoadStart',
   'previewLoadProgress',
   'fullIndexStart',
@@ -30,6 +31,7 @@ export const WEBVIEW_POSTED_MESSAGE_TYPES = [
   'fetchRows',
   'updateStartLine',
   'updateAutoRefresh',
+  'updateIndentGuides',
   'updateMaxLines'
 ] as const;
 
@@ -100,6 +102,7 @@ export interface JsonlMetadataPayload {
   maxLines: number;
   indent: number;
   autoRefresh: boolean;
+  indentGuides: boolean;
   startLine: number;
 }
 
@@ -139,6 +142,7 @@ export type ExtensionMessage =
   | { type: 'maxLinesError'; message?: string }
   | { type: 'startLineError'; message?: string }
   | { type: 'autoRefreshChanged'; autoRefresh: boolean }
+  | { type: 'indentGuidesChanged'; indentGuides: boolean }
   | { type: 'previewLoadStart'; payload: PreviewLoadPayload }
   | { type: 'previewLoadProgress'; payload: JsonlPreviewProgress }
   | { type: 'fullIndexStart'; payload: FullIndexStartPayload }
@@ -171,6 +175,7 @@ export type WebviewPostMessage =
     }
   | { type: 'updateStartLine'; value: number }
   | { type: 'updateAutoRefresh'; value: boolean }
+  | { type: 'updateIndentGuides'; value: boolean }
   | { type: 'updateMaxLines'; value: number };
 
 export interface MaxLinesValidationResult {

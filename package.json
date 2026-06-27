@@ -108,6 +108,11 @@
           "type": "boolean",
           "default": true,
           "description": "Automatically refresh open JSONL viewers when the underlying file changes. Disable to refresh manually from the viewer toolbar."
+        },
+        "quickJsonlViewer.indentGuides": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show vertical indentation guides in Pretty print mode."
         }
       }
     },

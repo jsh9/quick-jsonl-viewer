@@ -64,7 +64,8 @@ export class JsonlViewerProvider implements vscode.CustomReadonlyEditorProvider<
 
     webviewPanel.webview.html = getHtml(
       path.basename(document.uri.fsPath),
-      currentSettings.autoRefresh
+      currentSettings.autoRefresh,
+      currentSettings.indentGuides
     );
     webviewPanel.reveal(webviewPanel.viewColumn, false);
 
@@ -227,6 +228,13 @@ export class JsonlViewerProvider implements vscode.CustomReadonlyEditorProvider<
       });
     };
 
+    const postIndentGuidesChanged = async (): Promise<void> => {
+      await webviewPanel.webview.postMessage({
+        type: 'indentGuidesChanged',
+        indentGuides: currentSettings.indentGuides
+      });
+    };
+
     const scheduleFileReload = (): void => {
       if (!webviewReady || !currentSettings.autoRefresh) {
         return;
@@ -357,6 +365,31 @@ export class JsonlViewerProvider implements vscode.CustomReadonlyEditorProvider<
       await postAutoRefreshChanged();
     };
 
+    const handleUpdateIndentGuides = async (
+      message: WebviewMessage
+    ): Promise<void> => {
+      if (typeof message.value !== 'boolean') {
+        await postIndentGuidesChanged();
+        return;
+      }
+
+      if (message.value !== currentSettings.indentGuides) {
+        await vscode.workspace
+          .getConfiguration(SETTINGS_SECTION)
+          .update(
+            'indentGuides',
+            message.value,
+            vscode.ConfigurationTarget.Global
+          );
+        currentSettings = {
+          ...currentSettings,
+          indentGuides: message.value
+        };
+      }
+
+      await postIndentGuidesChanged();
+    };
+
     disposables.push(
       webviewPanel.webview.onDidReceiveMessage((message: WebviewMessage) => {
         if (message.type === 'ready') {
@@ -408,6 +441,13 @@ export class JsonlViewerProvider implements vscode.CustomReadonlyEditorProvider<
           return;
         }
 
+        if (message.type === 'updateIndentGuides') {
+          void handleUpdateIndentGuides(message).catch(async () => {
+            await postIndentGuidesChanged();
+          });
+          return;
+        }
+
         if (message.type === 'refresh') {
           clearFileReloadTimer();
           safeLoad();
@@ -430,6 +470,9 @@ export class JsonlViewerProvider implements vscode.CustomReadonlyEditorProvider<
         const affectsAutoRefresh = event.affectsConfiguration(
           `${SETTINGS_SECTION}.autoRefresh`
         );
+        const affectsIndentGuides = event.affectsConfiguration(
+          `${SETTINGS_SECTION}.indentGuides`
+        );
         if (affectsAutoRefresh) {
           // Auto-refresh is a global UI preference, so configuration changes
           // update controls and pending timers without re-reading the file.
@@ -438,6 +481,11 @@ export class JsonlViewerProvider implements vscode.CustomReadonlyEditorProvider<
             clearFileReloadTimer();
           }
           void postAutoRefreshChanged();
+        }
+
+        if (affectsIndentGuides) {
+          currentSettings = getSettings();
+          void postIndentGuidesChanged();
         }
 
         if (

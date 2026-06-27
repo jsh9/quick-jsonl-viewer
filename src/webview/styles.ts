@@ -68,14 +68,14 @@ export function getWebviewStyles(): string {
       white-space: nowrap;
     }
 
-    .auto-refresh-control {
+    .preference-control {
       display: inline-flex;
       align-items: center;
       gap: 5px;
       white-space: nowrap;
     }
 
-    .auto-refresh-control input {
+    .preference-control input {
       margin: 0;
     }
 
@@ -318,6 +318,23 @@ export function getWebviewStyles(): string {
       display: flex;
       align-items: flex-start;
       min-width: 0;
+    }
+
+    .pretty-json-prefix {
+      flex: 0 0 auto;
+      min-height: 1.45em;
+      background-repeat: repeat-x;
+      background-size: var(--json-indent-step, 2ch) 100%;
+    }
+
+    .indent-guides-enabled .pretty-json-prefix {
+      background-image: repeating-linear-gradient(
+        to right,
+        transparent 0,
+        transparent calc(var(--json-indent-step, 2ch) - 1px),
+        var(--vscode-editorIndentGuide-background, var(--vscode-editorWidget-border, rgba(127, 127, 127, 0.28))) calc(var(--json-indent-step, 2ch) - 1px),
+        var(--vscode-editorIndentGuide-background, var(--vscode-editorWidget-border, rgba(127, 127, 127, 0.28))) var(--json-indent-step, 2ch)
+      );
     }
 
     .pretty-json-code {

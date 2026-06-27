@@ -23,6 +23,7 @@ export interface JsonlDataPayload {
   readonly maxLines: number;
   readonly indent: number;
   readonly autoRefresh: boolean;
+  readonly indentGuides: boolean;
   readonly startLine: number;
   readonly lineCount: number | null;
   readonly preview: JsonlPreview;
@@ -84,6 +85,7 @@ export async function postJsonlData(
       maxLines: settings.maxLines,
       indent: settings.indent,
       autoRefresh: settings.autoRefresh,
+      indentGuides: settings.indentGuides,
       startLine: settings.startLine
     };
 

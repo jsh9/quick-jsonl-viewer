@@ -3,6 +3,7 @@ import { test } from 'node:test';
 import {
   DEFAULT_AUTO_REFRESH,
   DEFAULT_INDENT,
+  DEFAULT_INDENT_GUIDES,
   DEFAULT_MAX_LINES,
   INDEXED_PREVIEW_LINE_THRESHOLD,
   getDisplayRowCount,
@@ -17,12 +18,14 @@ test('settings validation falls back for invalid numbers', () => {
     normalizeViewerSettings({
       maxLines: -1,
       indent: 0,
-      autoRefresh: 'no'
+      autoRefresh: 'no',
+      indentGuides: 'no'
     }),
     {
       maxLines: DEFAULT_MAX_LINES,
       indent: DEFAULT_INDENT,
-      autoRefresh: DEFAULT_AUTO_REFRESH
+      autoRefresh: DEFAULT_AUTO_REFRESH,
+      indentGuides: DEFAULT_INDENT_GUIDES
     }
   );
 
@@ -30,12 +33,14 @@ test('settings validation falls back for invalid numbers', () => {
     normalizeViewerSettings({
       maxLines: 0,
       indent: 4,
-      autoRefresh: false
+      autoRefresh: false,
+      indentGuides: false
     }),
     {
       maxLines: 0,
       indent: 4,
-      autoRefresh: false
+      autoRefresh: false,
+      indentGuides: false
     }
   );
 });

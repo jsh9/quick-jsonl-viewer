@@ -160,6 +160,7 @@ export class FakeVscode {
   public maxLines = 20;
   public indent = 2;
   public autoRefresh = true;
+  public indentGuides = true;
   public executeCommandError: unknown;
   public configurationUpdateError: unknown;
 
@@ -201,6 +202,10 @@ export class FakeVscode {
               return this.autoRefresh;
             }
 
+            if (key === 'indentGuides') {
+              return this.indentGuides;
+            }
+
             return undefined;
           },
           update: async (
@@ -219,6 +224,10 @@ export class FakeVscode {
 
             if (key === 'autoRefresh' && typeof value === 'boolean') {
               this.autoRefresh = value;
+            }
+
+            if (key === 'indentGuides' && typeof value === 'boolean') {
+              this.indentGuides = value;
             }
           }
         };

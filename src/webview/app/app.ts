@@ -35,6 +35,7 @@ export function createWebviewApp(
   const refreshButton = elements.refreshButton;
   const rawContentsButton = elements.rawContentsButton;
   const autoRefreshInput = elements.autoRefreshInput;
+  const indentGuidesInput = elements.indentGuidesInput;
   const startInput = elements.startInput;
   const rowsInput = elements.rowsInput;
   const rowsError = elements.rowsError;
@@ -147,6 +148,13 @@ export function createWebviewApp(
     });
   });
 
+  indentGuidesInput.addEventListener('change', () => {
+    vscode.postMessage({
+      type: 'updateIndentGuides',
+      value: indentGuidesInput.checked
+    });
+  });
+
   rowsInput.addEventListener('keydown', (event) => {
     if (event.key === 'Enter') {
       event.preventDefault();
@@ -196,6 +204,7 @@ export function createWebviewApp(
       if (message.type === 'data') {
         viewState = 'limited';
         updateAutoRefreshControls(message.payload.autoRefresh);
+        updateIndentGuidesControls(message.payload.indentGuides);
         data = withLineCountState(message.payload);
         full = null;
         previewLoad = null;
@@ -281,9 +290,15 @@ export function createWebviewApp(
         return;
       }
 
+      if (message.type === 'indentGuidesChanged') {
+        updateIndentGuidesControls(message.indentGuides);
+        return;
+      }
+
       if (message.type === 'previewLoadStart') {
         viewState = 'previewLoading';
         updateAutoRefreshControls(message.payload.autoRefresh);
+        updateIndentGuidesControls(message.payload.indentGuides);
         data = null;
         full = null;
         previewLoad = message.payload;
@@ -308,6 +323,7 @@ export function createWebviewApp(
       if (message.type === 'fullIndexStart') {
         viewState = 'fullIndexing';
         updateAutoRefreshControls(message.payload.autoRefresh);
+        updateIndentGuidesControls(message.payload.indentGuides);
         data = null;
         full = withLineCountState({
           ...message.payload,
@@ -339,6 +355,7 @@ export function createWebviewApp(
       if (message.type === 'fullIndexReady') {
         viewState = 'fullReady';
         updateAutoRefreshControls(message.payload.autoRefresh);
+        updateIndentGuidesControls(message.payload.indentGuides);
         full = withLineCountState(message.payload);
         fullProgress = null;
         resetVirtualMeasurements();
@@ -473,6 +490,11 @@ export function createWebviewApp(
   function updateAutoRefreshControls(autoRefresh: boolean): void {
     autoRefreshInput.checked = autoRefresh;
     refreshButton.hidden = autoRefresh;
+  }
+
+  function updateIndentGuidesControls(indentGuides: boolean): void {
+    indentGuidesInput.checked = indentGuides;
+    document.body.classList.toggle('indent-guides-enabled', indentGuides);
   }
 
   function setControlsDisabled(disabled: boolean): void {

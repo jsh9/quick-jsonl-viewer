@@ -3,6 +3,7 @@ import { INDEXED_PREVIEW_LINE_THRESHOLD } from '../shared/jsonlConstants';
 export const DEFAULT_MAX_LINES = 20;
 export const DEFAULT_INDENT = 2;
 export const DEFAULT_AUTO_REFRESH = true;
+export const DEFAULT_INDENT_GUIDES = true;
 export const DEFAULT_START_LINE = 1;
 export { INDEXED_PREVIEW_LINE_THRESHOLD } from '../shared/jsonlConstants';
 
@@ -10,6 +11,7 @@ export interface ViewerSettings {
   readonly maxLines: number;
   readonly indent: number;
   readonly autoRefresh: boolean;
+  readonly indentGuides: boolean;
 }
 
 export interface ViewerLoadSettings extends ViewerSettings {
@@ -20,11 +22,13 @@ export function normalizeViewerSettings(input: {
   readonly maxLines?: unknown;
   readonly indent?: unknown;
   readonly autoRefresh?: unknown;
+  readonly indentGuides?: unknown;
 }): ViewerSettings {
   return {
     maxLines: normalizeInteger(input.maxLines, DEFAULT_MAX_LINES, 0),
     indent: normalizeInteger(input.indent, DEFAULT_INDENT, 1),
-    autoRefresh: normalizeBoolean(input.autoRefresh, DEFAULT_AUTO_REFRESH)
+    autoRefresh: normalizeBoolean(input.autoRefresh, DEFAULT_AUTO_REFRESH),
+    indentGuides: normalizeBoolean(input.indentGuides, DEFAULT_INDENT_GUIDES)
   };
 }
 

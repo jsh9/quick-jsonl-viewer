@@ -686,6 +686,9 @@ export function createRenderer(context: RendererContext): Renderer {
   ): HTMLElement {
     const line = document.createElement('div');
     line.className = 'pretty-json-line';
+    const leadingSpaces = countLeadingSpaces(lineText);
+    const codeText = lineText.slice(leadingSpaces);
+    line.append(renderPrettyJsonPrefix(leadingSpaces, getCurrentIndent()));
 
     if (range) {
       line.append(
@@ -719,9 +722,33 @@ export function createRenderer(context: RendererContext): Renderer {
 
     const code = document.createElement('pre');
     code.className = 'pretty-json-code';
-    appendHighlightedJson(code, lineText);
+    appendHighlightedJson(code, codeText);
     line.append(code);
     return line;
+  }
+
+  function renderPrettyJsonPrefix(
+    leadingSpaces: number,
+    indentWidth: number
+  ): HTMLSpanElement {
+    const prefix = document.createElement('span');
+    prefix.className = 'pretty-json-prefix';
+    prefix.style.width = String(leadingSpaces) + 'ch';
+    prefix.style.setProperty('--json-indent-step', String(indentWidth) + 'ch');
+    return prefix;
+  }
+
+  function getCurrentIndent(): number {
+    const indent = context.getData()?.indent ?? context.getFull()?.indent ?? 2;
+    return Number.isInteger(indent) && indent > 0 ? indent : 2;
+  }
+
+  function countLeadingSpaces(value: string): number {
+    let count = 0;
+    while (value.charCodeAt(count) === 32) {
+      count += 1;
+    }
+    return count;
   }
 
   function renderJsonFoldToggle(
