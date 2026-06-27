@@ -150,6 +150,10 @@ export function getWebviewStyles(): string {
       outline-offset: 2px;
     }
 
+    #refresh {
+      min-width: auto;
+    }
+
     .mode-tabs {
       display: flex;
       align-items: center;

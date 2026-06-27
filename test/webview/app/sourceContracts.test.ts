@@ -534,8 +534,12 @@ test('webview exposes all render modes and preserves virtual-scroll helpers', as
   assert.match(source, /<body\$\{indentGuidesClass\}>/);
   assert.match(
     source,
-    /id="refresh"\$\{refreshButtonHidden\}>Refresh<\/button>/
+    /<div class="actions">[\s\S]*?<button type="button" id="refresh"\$\{refreshButtonHidden\}>Refresh<\/button>[\s\S]*?<div class="mode-tabs"/
   );
+  assert.match(source, /#refresh \{[\s\S]*?min-width: auto;/);
+  const modeTabsHtml =
+    /<div class="mode-tabs"[\s\S]*?<\/div>/.exec(source)?.[0] ?? '';
+  assert.doesNotMatch(modeTabsHtml, /id="refresh"\$\{refreshButtonHidden\}/);
   assert.match(
     source,
     /id="auto-refresh" type="checkbox"\$\{autoRefreshChecked\}>/

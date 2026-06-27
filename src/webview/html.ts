@@ -41,11 +41,11 @@ ${getWebviewStyles()}
       <span id="preview-status" class="info-item"></span>
     </div>
     <div class="actions">
+      <button type="button" id="refresh"${refreshButtonHidden}>Refresh</button>
       <div class="mode-tabs" role="toolbar" aria-label="JSONL view mode">
         <button class="mode-button" type="button" data-mode="pretty" aria-pressed="true">Pretty print</button>
         <button class="mode-button" type="button" data-mode="wrappedRaw" aria-pressed="false">Raw (wrapped)</button>
         <button class="mode-button" type="button" data-mode="rawLine" aria-pressed="false">Raw (unwrapped)</button>
-        <button class="mode-button refresh-action" type="button" id="refresh"${refreshButtonHidden}>Refresh</button>
         <button class="mode-button raw-action" type="button" id="raw-contents">Raw contents</button>
       </div>
     </div>
