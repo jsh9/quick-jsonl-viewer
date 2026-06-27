@@ -43,15 +43,17 @@ export class JsonlViewerProvider implements vscode.CustomReadonlyEditorProvider<
     // reopen the exact original/modified pair to preserve native diff state.
     const activeTextDiff = getActiveTextDiffForDocument(document.uri);
     if (activeTextDiff) {
+      // Capture the target column before disposal because VS Code owns the
+      // panel lifecycle after dispose; the reopened diff still needs to land
+      // where the accidental custom editor was created.
+      const viewColumn = webviewPanel.viewColumn ?? vscode.ViewColumn.Active;
       webviewPanel.dispose();
       await vscode.commands.executeCommand(
         'vscode.diff',
         activeTextDiff.original,
         activeTextDiff.modified,
         undefined,
-        {
-          viewColumn: webviewPanel.viewColumn ?? vscode.ViewColumn.Active
-        }
+        { viewColumn }
       );
       return;
     }

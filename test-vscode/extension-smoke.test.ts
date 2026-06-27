@@ -7,6 +7,9 @@ import { promisify } from 'node:util';
 import * as vscode from 'vscode';
 
 const execFileAsync = promisify(execFile);
+// Git smoke tests create real repositories; keep their roots so teardown can
+// remove them after VS Code closes diff editors that may hold file handles.
+const tempDirs: string[] = [];
 
 interface GitExtension {
   getAPI(version: 1): GitApi;
@@ -33,6 +36,9 @@ interface GitChange {
 suite('Quick JSONL Viewer VS Code smoke tests', () => {
   suiteTeardown(async () => {
     await vscode.commands.executeCommand('workbench.action.closeAllEditors');
+    await Promise.all(
+      tempDirs.map((dir) => fs.rm(dir, { recursive: true, force: true }))
+    );
   });
 
   test('extension activates and contributes expected commands', async () => {
@@ -129,6 +135,7 @@ async function createGitJsonlFixture(): Promise<{
   const repoDir = await fs.mkdtemp(
     path.join(os.tmpdir(), 'quick-jsonl-viewer-git-diff-smoke-')
   );
+  tempDirs.push(repoDir);
   const filePath = path.join(repoDir, 'fixture.jsonl');
 
   await runGit(repoDir, ['init']);
