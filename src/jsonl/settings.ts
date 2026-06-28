@@ -14,7 +14,9 @@ export interface ViewerSettings {
   readonly indentGuides: boolean;
 }
 
-export interface ViewerLoadSettings extends ViewerSettings {
+export interface ViewerLoadSettings {
+  readonly maxLines: number;
+  readonly indent: number;
   readonly startLine: number;
 }
 
@@ -34,6 +36,19 @@ export function normalizeViewerSettings(input: {
 
 export function shouldUseIndexedPreview(maxLines: number): boolean {
   return maxLines === 0 || maxLines >= INDEXED_PREVIEW_LINE_THRESHOLD;
+}
+
+export function shouldUseIndexedLoad(
+  maxLines: number,
+  startLine: number
+): boolean {
+  // Distant start-line jumps still require a prefix scan. Route them
+  // through indexed loading so the UI can report progress and reuse
+  // row-offset fetching instead of silently skipping many lines.
+  return (
+    shouldUseIndexedPreview(maxLines) ||
+    startLine > INDEXED_PREVIEW_LINE_THRESHOLD
+  );
 }
 
 export function getDisplayRowCount(

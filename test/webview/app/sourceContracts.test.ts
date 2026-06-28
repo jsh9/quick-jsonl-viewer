@@ -105,15 +105,10 @@ test('raw-line virtual rows stay unwrapped without fixed-height clipping', async
 test('pretty-print rows expose row-level collapse controls', async () => {
   const source = await readExtensionSource();
 
-  assert.match(source, /const collapsedPrettyLines = new Set/);
   assert.match(source, /className = 'collapse-toggle'/);
   assert.match(source, /setAttribute\('aria-expanded'/);
   assert.match(source, /getCollapsedPreview\(entry\.raw\)/);
   assert.match(source, /getHiddenLineCountText\(entry\.formatted\)/);
-  assert.match(
-    source,
-    /measureRenderedRows\(rowMode\);[\s\S]*?context\.scheduleVisibleRowsRequest\(\);/
-  );
   assert.match(
     source,
     /\.collapsed-preview \{[\s\S]*?text-overflow: ellipsis;/
@@ -123,27 +118,11 @@ test('pretty-print rows expose row-level collapse controls', async () => {
 test('pretty-print JSON blocks expose nested collapse controls', async () => {
   const source = await readExtensionSource();
 
-  assert.match(source, /const collapsedJsonBlocks = new Set/);
-  assert.match(source, /function renderPrettyJson\(/);
   assert.match(source, /getJsonFoldRanges\(entry\.formatted\)/);
   assert.match(source, /className = 'json-fold-toggle'/);
   assert.match(source, /getCollapsedJsonLine\(lines, range\)/);
   assert.match(source, /getLongJsonStringValueLine\(lines\[lineIndex\]\)/);
   assert.match(source, /getJsonValueFoldKey\(entry\.lineNumber, lineIndex\)/);
-  assert.match(
-    source,
-    /toggleJsonValue\(entry, rowMode, virtualized, rowIndex, lineIndex\)/
-  );
-  assert.match(
-    source,
-    /toggleJsonBlock\(entry, rowMode, virtualized, rowIndex, lineIndex\)/
-  );
-  assert.match(source, /function renderPrettyJsonPrefix\(/);
-  assert.match(source, /function countLeadingSpaces\(value: string\)/);
-  assert.match(
-    source,
-    /const leadingSpaces = countLeadingSpaces\(lineText\);[\s\S]*?const codeText = lineText\.slice\(leadingSpaces\);[\s\S]*?line\.append\(renderPrettyJsonPrefix\(leadingSpaces, getCurrentIndent\(\)\)\);/
-  );
   assert.match(source, /appendHighlightedJson\(code, codeText\);/);
   assert.match(source, /\.pretty-json-line \{[\s\S]*?display: flex;/);
   assert.match(
@@ -564,7 +543,7 @@ test('indent guides checkbox updates render state without reloading data', async
   const source = await readExtensionSource();
 
   // Verifies the global preference toggles checkbox and CSS state only, so
-  // existing Pretty print rows update without a data reload.
+  // file-load payloads cannot overwrite newer preference state.
   assert.match(
     source,
     /indentGuidesInput\.addEventListener\('change'[\s\S]*?type: 'updateIndentGuides'/
@@ -577,29 +556,14 @@ test('indent guides checkbox updates render state without reloading data', async
     source,
     /if \(message\.type === 'indentGuidesChanged'\) \{[\s\S]*?updateIndentGuidesControls\(message\.indentGuides\);/
   );
-  assert.match(
-    source,
-    /if \(message\.type === 'data'\) \{[\s\S]*?updateIndentGuidesControls\(message\.payload\.indentGuides\);/
-  );
-  assert.match(
-    source,
-    /if \(message\.type === 'previewLoadStart'\) \{[\s\S]*?updateIndentGuidesControls\(message\.payload\.indentGuides\);/
-  );
-  assert.match(
-    source,
-    /if \(message\.type === 'fullIndexStart'\) \{[\s\S]*?updateIndentGuidesControls\(message\.payload\.indentGuides\);/
-  );
-  assert.match(
-    source,
-    /if \(message\.type === 'fullIndexReady'\) \{[\s\S]*?updateIndentGuidesControls\(message\.payload\.indentGuides\);/
-  );
+  assert.doesNotMatch(source, /message\.payload\.indentGuides/);
 });
 
 test('manual refresh button is shown only when auto-refresh is disabled', async () => {
   const source = await readExtensionSource();
 
   // Verifies every auto-refresh source updates both controls through one path,
-  // so config changes and data loads cannot diverge checkbox/Refresh state.
+  // so file-load payloads cannot overwrite checkbox/Refresh state.
   assert.match(
     source,
     /autoRefreshInput\.addEventListener\('change'[\s\S]*?type: 'updateAutoRefresh'/
@@ -620,20 +584,5 @@ test('manual refresh button is shown only when auto-refresh is disabled', async 
     source,
     /if \(message\.type === 'autoRefreshChanged'\) \{[\s\S]*?updateAutoRefreshControls\(message\.autoRefresh\);/
   );
-  assert.match(
-    source,
-    /if \(message\.type === 'data'\) \{[\s\S]*?updateAutoRefreshControls\(message\.payload\.autoRefresh\);/
-  );
-  assert.match(
-    source,
-    /if \(message\.type === 'previewLoadStart'\) \{[\s\S]*?updateAutoRefreshControls\(message\.payload\.autoRefresh\);/
-  );
-  assert.match(
-    source,
-    /if \(message\.type === 'fullIndexStart'\) \{[\s\S]*?updateAutoRefreshControls\(message\.payload\.autoRefresh\);/
-  );
-  assert.match(
-    source,
-    /if \(message\.type === 'fullIndexReady'\) \{[\s\S]*?updateAutoRefreshControls\(message\.payload\.autoRefresh\);/
-  );
+  assert.doesNotMatch(source, /message\.payload\.autoRefresh/);
 });

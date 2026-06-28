@@ -8,6 +8,7 @@ import {
   INDEXED_PREVIEW_LINE_THRESHOLD,
   getDisplayRowCount,
   normalizeViewerSettings,
+  shouldUseIndexedLoad,
   shouldUseIndexedPreview
 } from '../../src/jsonl/settings';
 
@@ -54,6 +55,12 @@ test('large positive row counts use indexed preview and clamp to total lines', (
   );
   assert.equal(shouldUseIndexedPreview(INDEXED_PREVIEW_LINE_THRESHOLD), true);
   assert.equal(shouldUseIndexedPreview(10_000_000), true);
+  // The load helper also indexes distant Start at line jumps; this avoids
+  // silently scanning a long prefix in the lightweight preview path.
+  assert.equal(shouldUseIndexedLoad(DEFAULT_MAX_LINES, 1), false);
+  assert.equal(shouldUseIndexedLoad(DEFAULT_MAX_LINES, 200), false);
+  assert.equal(shouldUseIndexedLoad(DEFAULT_MAX_LINES, 201), true);
+  assert.equal(shouldUseIndexedLoad(0, 1), true);
 
   assert.equal(getDisplayRowCount(200_000, 0), 200_000);
   assert.equal(getDisplayRowCount(200_000, 1_000), 1_000);

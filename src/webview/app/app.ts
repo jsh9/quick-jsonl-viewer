@@ -203,8 +203,6 @@ export function createWebviewApp(
 
       if (message.type === 'data') {
         viewState = 'limited';
-        updateAutoRefreshControls(message.payload.autoRefresh);
-        updateIndentGuidesControls(message.payload.indentGuides);
         data = withLineCountState(message.payload);
         full = null;
         previewLoad = null;
@@ -297,8 +295,6 @@ export function createWebviewApp(
 
       if (message.type === 'previewLoadStart') {
         viewState = 'previewLoading';
-        updateAutoRefreshControls(message.payload.autoRefresh);
-        updateIndentGuidesControls(message.payload.indentGuides);
         data = null;
         full = null;
         previewLoad = message.payload;
@@ -322,8 +318,6 @@ export function createWebviewApp(
 
       if (message.type === 'fullIndexStart') {
         viewState = 'fullIndexing';
-        updateAutoRefreshControls(message.payload.autoRefresh);
-        updateIndentGuidesControls(message.payload.indentGuides);
         data = null;
         full = withLineCountState({
           ...message.payload,
@@ -354,8 +348,6 @@ export function createWebviewApp(
 
       if (message.type === 'fullIndexReady') {
         viewState = 'fullReady';
-        updateAutoRefreshControls(message.payload.autoRefresh);
-        updateIndentGuidesControls(message.payload.indentGuides);
         full = withLineCountState(message.payload);
         fullProgress = null;
         resetVirtualMeasurements();

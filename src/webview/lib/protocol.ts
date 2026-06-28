@@ -101,8 +101,6 @@ export interface JsonlMetadataPayload {
   lastModified: string;
   maxLines: number;
   indent: number;
-  autoRefresh: boolean;
-  indentGuides: boolean;
   startLine: number;
 }
 

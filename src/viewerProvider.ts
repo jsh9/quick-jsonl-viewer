@@ -191,7 +191,8 @@ export class JsonlViewerProvider implements vscode.CustomReadonlyEditorProvider<
         () => generation,
         controller.signal,
         {
-          ...currentSettings,
+          maxLines: currentSettings.maxLines,
+          indent: currentSettings.indent,
           startLine
         },
         (index) => {
@@ -233,6 +234,18 @@ export class JsonlViewerProvider implements vscode.CustomReadonlyEditorProvider<
         type: 'indentGuidesChanged',
         indentGuides: currentSettings.indentGuides
       });
+    };
+
+    // Refresh settings before posting controls because ready/config events can
+    // arrive after the HTML was rendered. File-load payloads intentionally do
+    // not carry these preferences, so these messages remain authoritative.
+    const postPreferenceState = async (): Promise<void> => {
+      currentSettings = getSettings();
+      if (!currentSettings.autoRefresh) {
+        clearFileReloadTimer();
+      }
+      await postAutoRefreshChanged();
+      await postIndentGuidesChanged();
     };
 
     const scheduleFileReload = (): void => {
@@ -394,7 +407,14 @@ export class JsonlViewerProvider implements vscode.CustomReadonlyEditorProvider<
       webviewPanel.webview.onDidReceiveMessage((message: WebviewMessage) => {
         if (message.type === 'ready') {
           webviewReady = true;
-          safeLoad();
+          // Reconcile controls before the first load. That ordering prevents a
+          // slow initial data response from becoming the source of truth for
+          // preference UI state.
+          void postPreferenceState()
+            .catch(() => undefined)
+            .finally(() => {
+              safeLoad();
+            });
           return;
         }
 

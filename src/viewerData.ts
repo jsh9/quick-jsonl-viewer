@@ -11,7 +11,7 @@ import {
   JsonlLineIndex,
   JsonlPreview,
   readJsonlPreview,
-  shouldUseIndexedPreview,
+  shouldUseIndexedLoad,
   ViewerLoadSettings
 } from './jsonl';
 import { formatError } from './viewerProtocol';
@@ -22,8 +22,6 @@ export interface JsonlDataPayload {
   readonly lastModified: string;
   readonly maxLines: number;
   readonly indent: number;
-  readonly autoRefresh: boolean;
-  readonly indentGuides: boolean;
   readonly startLine: number;
   readonly lineCount: number | null;
   readonly preview: JsonlPreview;
@@ -84,12 +82,13 @@ export async function postJsonlData(
       lastModified: stats.mtime.toLocaleString(),
       maxLines: settings.maxLines,
       indent: settings.indent,
-      autoRefresh: settings.autoRefresh,
-      indentGuides: settings.indentGuides,
       startLine: settings.startLine
     };
 
-    if (shouldUseIndexedPreview(settings.maxLines)) {
+    if (shouldUseIndexedLoad(settings.maxLines, settings.startLine)) {
+      // Finite indexed previews only need offsets through the requested
+      // window. Stopping after startLine + maxLines avoids indexing rows the
+      // UI will not show for this page.
       const lineLimit =
         settings.maxLines > 0
           ? settings.startLine - 1 + settings.maxLines
