@@ -29,6 +29,10 @@ It is hosted both on VS Code marketplace and Open VSX:
 
 ![](./images/screenshots/pretty-print.png)
 
+You can choose to preview JSONL from a certain line other than the initial one:
+
+![](./images/screenshots/start-from.png)
+
 "**Raw (wrapped)**" view:
 
 ![](./images/screenshots/raw-wrapped.png)
