@@ -5,6 +5,7 @@ import {
 import { createRenderer, type VscodeApi } from './render';
 import {
   MAX_LINES_ERROR_MESSAGE,
+  START_LINE_ERROR_MESSAGE,
   type ExtensionMessage,
   type FullIndexProgress,
   type FullIndexState,
@@ -12,7 +13,10 @@ import {
   type JsonlPreviewProgress,
   type PreviewLoadPayload,
   type RenderMode,
+  type RowInputErrorOwner,
   type ViewState,
+  clearRowInputErrorOwner,
+  isManualRefreshEnabled,
   normalizeLineCountProgress,
   withLineCountState
 } from '../lib/protocol';
@@ -31,7 +35,11 @@ export function createWebviewApp(
 ): void {
   const content = elements.content;
   const modeButtons = elements.modeButtons;
+  const refreshButton = elements.refreshButton;
   const rawContentsButton = elements.rawContentsButton;
+  const autoRefreshInput = elements.autoRefreshInput;
+  const indentGuidesInput = elements.indentGuidesInput;
+  const startInput = elements.startInput;
   const rowsInput = elements.rowsInput;
   const rowsError = elements.rowsError;
 
@@ -49,6 +57,11 @@ export function createWebviewApp(
   let pendingRequestId = '';
   let animationFrame = 0;
   let lastSubmittedMaxLines = '';
+  let lastSubmittedStartLine = '';
+  // Both numeric inputs share one visible error slot. Track the owner so
+  // typing in one field does not clear an unrelated invalid state in the other.
+  let rowsErrorOwner: RowInputErrorOwner | null = null;
+  let autoRefreshEnabled = autoRefreshInput.checked;
 
   const renderer = createRenderer({
     vscode,
@@ -77,12 +90,16 @@ export function createWebviewApp(
     setLastSubmittedMaxLines: (value) => {
       lastSubmittedMaxLines = value;
     },
+    setLastSubmittedStartLine: (value) => {
+      lastSubmittedStartLine = value;
+    },
     scheduleVisibleRowsRequest,
     requestVisibleRows,
     requestLimitedVisibleRows,
     updateModeButtons,
+    syncRefreshButtonState,
     setControlsDisabled,
-    clearRowsError
+    clearRowsError: clearAllRowsErrors
   });
   const {
     setLineCountText,
@@ -101,6 +118,7 @@ export function createWebviewApp(
 
   setVirtualScrollMode(mode);
   content.focus({ preventScroll: true });
+  syncRefreshButtonState();
 
   for (const button of modeButtons) {
     button.addEventListener('click', () => {
@@ -128,6 +146,24 @@ export function createWebviewApp(
     vscode.postMessage({ type: 'rawContents' });
   });
 
+  refreshButton.addEventListener('click', () => {
+    vscode.postMessage({ type: 'refresh' });
+  });
+
+  autoRefreshInput.addEventListener('change', () => {
+    vscode.postMessage({
+      type: 'updateAutoRefresh',
+      value: autoRefreshInput.checked
+    });
+  });
+
+  indentGuidesInput.addEventListener('change', () => {
+    vscode.postMessage({
+      type: 'updateIndentGuides',
+      value: indentGuidesInput.checked
+    });
+  });
+
   rowsInput.addEventListener('keydown', (event) => {
     if (event.key === 'Enter') {
       event.preventDefault();
@@ -135,12 +171,27 @@ export function createWebviewApp(
     }
   });
 
+  startInput.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      submitStartLine();
+    }
+  });
+
   rowsInput.addEventListener('blur', () => {
     submitMaxLines();
   });
 
+  startInput.addEventListener('blur', () => {
+    submitStartLine();
+  });
+
   rowsInput.addEventListener('input', () => {
-    clearRowsError();
+    clearRowsError('maxLines');
+  });
+
+  startInput.addEventListener('input', () => {
+    clearRowsError('startLine');
   });
 
   window.addEventListener(
@@ -231,6 +282,23 @@ export function createWebviewApp(
 
       if (message.type === 'maxLinesError') {
         showRowsError(message.message || MAX_LINES_ERROR_MESSAGE);
+        return;
+      }
+
+      if (message.type === 'startLineError') {
+        showStartLineError(message.message || START_LINE_ERROR_MESSAGE);
+        return;
+      }
+
+      if (message.type === 'autoRefreshChanged') {
+        // Preference-only updates should not disturb current render state; the
+        // provider sends them when checkbox/config changes need control sync.
+        updateAutoRefreshControls(message.autoRefresh);
+        return;
+      }
+
+      if (message.type === 'indentGuidesChanged') {
+        updateIndentGuidesControls(message.indentGuides);
         return;
       }
 
@@ -417,8 +485,34 @@ export function createWebviewApp(
     }
   }
 
+  // Keep the checkbox and manual Refresh button derived from one state value.
+  // Settings can change outside this webview, so both controls must reconcile
+  // from provider messages instead of only the local change event.
+  function updateAutoRefreshControls(autoRefresh: boolean): void {
+    autoRefreshEnabled = autoRefresh;
+    autoRefreshInput.checked = autoRefresh;
+    refreshButton.hidden = autoRefresh;
+    syncRefreshButtonState();
+  }
+
+  function updateIndentGuidesControls(indentGuides: boolean): void {
+    indentGuidesInput.checked = indentGuides;
+    document.body.classList.toggle('indent-guides-enabled', indentGuides);
+  }
+
   function setControlsDisabled(disabled: boolean): void {
     setDomControlsDisabled(elements, disabled);
+    syncRefreshButtonState();
+  }
+
+  // Derive Refresh availability from app state after every control-state
+  // transition; auto-refresh config changes can arrive while a renderer has
+  // intentionally disabled the rest of the toolbar.
+  function syncRefreshButtonState(): void {
+    refreshButton.disabled = !isManualRefreshEnabled(
+      autoRefreshEnabled,
+      viewState
+    );
   }
 
   function submitMaxLines(): void {
@@ -444,19 +538,71 @@ export function createWebviewApp(
     }
 
     lastSubmittedMaxLines = nextValue;
-    clearRowsError();
+    clearRowsError('maxLines');
     vscode.postMessage({
       type: 'updateMaxLines',
       value
     });
   }
 
+  function submitStartLine(): void {
+    if (startInput.disabled) {
+      return;
+    }
+
+    const rawValue = startInput.value.trim();
+    if (rawValue === '') {
+      showStartLineError('Start row must be a positive whole number.');
+      return;
+    }
+
+    const value = Number(rawValue);
+    if (!Number.isInteger(value) || value < 1) {
+      showStartLineError('Start row must be a positive whole number.');
+      return;
+    }
+
+    const nextValue = String(value);
+    if (nextValue === lastSubmittedStartLine) {
+      return;
+    }
+
+    lastSubmittedStartLine = nextValue;
+    clearRowsError('startLine');
+    vscode.postMessage({
+      type: 'updateStartLine',
+      value
+    });
+  }
+
   function showRowsError(message: string): void {
+    rowsErrorOwner = 'maxLines';
     rowsInput.classList.add('invalid');
     rowsError.textContent = message;
   }
 
-  function clearRowsError(): void {
+  function showStartLineError(message: string): void {
+    rowsErrorOwner = 'startLine';
+    startInput.classList.add('invalid');
+    rowsError.textContent = message;
+  }
+
+  function clearRowsError(owner: RowInputErrorOwner): void {
+    rowsErrorOwner = clearRowInputErrorOwner(rowsErrorOwner, owner);
+    if (owner === 'maxLines') {
+      rowsInput.classList.remove('invalid');
+    } else {
+      startInput.classList.remove('invalid');
+    }
+
+    if (!rowsErrorOwner) {
+      rowsError.textContent = '';
+    }
+  }
+
+  function clearAllRowsErrors(): void {
+    rowsErrorOwner = null;
+    startInput.classList.remove('invalid');
     rowsInput.classList.remove('invalid');
     rowsError.textContent = '';
   }

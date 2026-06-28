@@ -1,7 +1,12 @@
 import * as nodeFs from 'node:fs';
 import * as path from 'node:path';
 import * as vscode from 'vscode';
-import { fetchJsonlRows, getDisplayRowCount, JsonlLineIndex } from './jsonl';
+import {
+  DEFAULT_START_LINE,
+  fetchJsonlRows,
+  getDisplayRowCount,
+  JsonlLineIndex
+} from './jsonl';
 import { FILE_RELOAD_DEBOUNCE_MS, SETTINGS_SECTION } from './constants';
 import { getHtml } from './webview/html';
 import {
@@ -41,8 +46,6 @@ export class JsonlViewerProvider implements vscode.CustomReadonlyEditorProvider<
     webviewPanel.webview.options = {
       enableScripts: true
     };
-    webviewPanel.webview.html = getHtml(path.basename(document.uri.fsPath));
-    webviewPanel.reveal(webviewPanel.viewColumn, false);
 
     const disposables: vscode.Disposable[] = [];
     let generation = 0;
@@ -50,10 +53,30 @@ export class JsonlViewerProvider implements vscode.CustomReadonlyEditorProvider<
     let abortController: AbortController | undefined;
     let fullIndex: JsonlLineIndex | undefined;
     let currentSettings = getSettings();
+    // Keep Start at line in the editor closure, not VS Code settings. The
+    // same file can be open in multiple viewers, and changing one must not
+    // move another viewer or persist into future editors.
+    let startLine = DEFAULT_START_LINE;
     let fileReloadTimer: ReturnType<typeof setTimeout> | undefined;
     let currentFileSnapshot: FileSnapshot | undefined;
     let exactLineCountCache: ExactLineCountCache | undefined;
     let exactLineCountRequest: ExactLineCountRequest | undefined;
+
+    webviewPanel.webview.html = getHtml(
+      path.basename(document.uri.fsPath),
+      currentSettings.autoRefresh,
+      currentSettings.indentGuides
+    );
+    webviewPanel.reveal(webviewPanel.viewColumn, false);
+
+    const clearFileReloadTimer = (): void => {
+      if (!fileReloadTimer) {
+        return;
+      }
+
+      clearTimeout(fileReloadTimer);
+      fileReloadTimer = undefined;
+    };
 
     const cancelCurrentWork = (): void => {
       abortController?.abort();
@@ -157,6 +180,9 @@ export class JsonlViewerProvider implements vscode.CustomReadonlyEditorProvider<
       abortController = controller;
       fullIndex = undefined;
       currentSettings = getSettings();
+      if (!currentSettings.autoRefresh) {
+        clearFileReloadTimer();
+      }
 
       await postJsonlData(
         document.uri,
@@ -164,7 +190,11 @@ export class JsonlViewerProvider implements vscode.CustomReadonlyEditorProvider<
         currentGeneration,
         () => generation,
         controller.signal,
-        currentSettings,
+        {
+          maxLines: currentSettings.maxLines,
+          indent: currentSettings.indent,
+          startLine
+        },
         (index) => {
           fullIndex = index;
         },
@@ -190,8 +220,36 @@ export class JsonlViewerProvider implements vscode.CustomReadonlyEditorProvider<
       });
     };
 
+    // Send the authoritative preference state without starting a data load.
+    // The webview uses this to reconcile checkbox state and Refresh visibility.
+    const postAutoRefreshChanged = async (): Promise<void> => {
+      await webviewPanel.webview.postMessage({
+        type: 'autoRefreshChanged',
+        autoRefresh: currentSettings.autoRefresh
+      });
+    };
+
+    const postIndentGuidesChanged = async (): Promise<void> => {
+      await webviewPanel.webview.postMessage({
+        type: 'indentGuidesChanged',
+        indentGuides: currentSettings.indentGuides
+      });
+    };
+
+    // Refresh settings before posting controls because ready/config events can
+    // arrive after the HTML was rendered. File-load payloads intentionally do
+    // not carry these preferences, so these messages remain authoritative.
+    const postPreferenceState = async (): Promise<void> => {
+      currentSettings = getSettings();
+      if (!currentSettings.autoRefresh) {
+        clearFileReloadTimer();
+      }
+      await postAutoRefreshChanged();
+      await postIndentGuidesChanged();
+    };
+
     const scheduleFileReload = (): void => {
-      if (!webviewReady) {
+      if (!webviewReady || !currentSettings.autoRefresh) {
         return;
       }
 
@@ -199,9 +257,7 @@ export class JsonlViewerProvider implements vscode.CustomReadonlyEditorProvider<
       // abort/generation path clears stale indexes without thrashing the UI.
       invalidateExactLineCount();
 
-      if (fileReloadTimer) {
-        clearTimeout(fileReloadTimer);
-      }
+      clearFileReloadTimer();
 
       fileReloadTimer = setTimeout(() => {
         fileReloadTimer = undefined;
@@ -224,12 +280,14 @@ export class JsonlViewerProvider implements vscode.CustomReadonlyEditorProvider<
       const mode = getWebviewRenderMode(message.mode);
       const totalRows = getDisplayRowCount(
         fullIndex.indexedLineCount,
-        currentSettings.maxLines
+        currentSettings.maxLines,
+        startLine
       );
       const start = clampMessageInteger(message.start, 0, totalRows);
       const count = clampMessageInteger(message.count, 0, totalRows - start);
+      const fileStart = startLine - 1 + start;
       const rows = await fetchJsonlRows(document.uri.fsPath, fullIndex, {
-        start,
+        start: fileStart,
         count,
         indent: currentSettings.indent
       });
@@ -243,7 +301,7 @@ export class JsonlViewerProvider implements vscode.CustomReadonlyEditorProvider<
         requestId,
         mode,
         payload: {
-          ...rows,
+          entries: rows.entries,
           start,
           totalLines: totalRows
         }
@@ -268,11 +326,95 @@ export class JsonlViewerProvider implements vscode.CustomReadonlyEditorProvider<
         .update('maxLines', value, vscode.ConfigurationTarget.Global);
     };
 
+    const handleUpdateStartLine = async (
+      message: WebviewMessage
+    ): Promise<void> => {
+      const value =
+        typeof message.value === 'number' ? message.value : Number.NaN;
+      if (!Number.isInteger(value) || value < 1) {
+        await webviewPanel.webview.postMessage({
+          type: 'startLineError',
+          message: 'Start row must be a positive whole number.'
+        });
+        return;
+      }
+
+      if (value === startLine) {
+        return;
+      }
+
+      startLine = value;
+      safeLoad();
+    };
+
+    const handleUpdateAutoRefresh = async (
+      message: WebviewMessage
+    ): Promise<void> => {
+      if (typeof message.value !== 'boolean') {
+        // Re-post the stored preference so a malformed webview message cannot
+        // leave the checkbox showing a value the extension did not accept.
+        await postAutoRefreshChanged();
+        return;
+      }
+
+      if (message.value !== currentSettings.autoRefresh) {
+        await vscode.workspace
+          .getConfiguration(SETTINGS_SECTION)
+          .update(
+            'autoRefresh',
+            message.value,
+            vscode.ConfigurationTarget.Global
+          );
+        currentSettings = {
+          ...currentSettings,
+          autoRefresh: message.value
+        };
+      }
+
+      if (!currentSettings.autoRefresh) {
+        clearFileReloadTimer();
+      }
+
+      await postAutoRefreshChanged();
+    };
+
+    const handleUpdateIndentGuides = async (
+      message: WebviewMessage
+    ): Promise<void> => {
+      if (typeof message.value !== 'boolean') {
+        await postIndentGuidesChanged();
+        return;
+      }
+
+      if (message.value !== currentSettings.indentGuides) {
+        await vscode.workspace
+          .getConfiguration(SETTINGS_SECTION)
+          .update(
+            'indentGuides',
+            message.value,
+            vscode.ConfigurationTarget.Global
+          );
+        currentSettings = {
+          ...currentSettings,
+          indentGuides: message.value
+        };
+      }
+
+      await postIndentGuidesChanged();
+    };
+
     disposables.push(
       webviewPanel.webview.onDidReceiveMessage((message: WebviewMessage) => {
         if (message.type === 'ready') {
           webviewReady = true;
-          safeLoad();
+          // Reconcile controls before the first load. That ordering prevents a
+          // slow initial data response from becoming the source of truth for
+          // preference UI state.
+          void postPreferenceState()
+            .catch(() => undefined)
+            .finally(() => {
+              safeLoad();
+            });
           return;
         }
 
@@ -302,6 +444,36 @@ export class JsonlViewerProvider implements vscode.CustomReadonlyEditorProvider<
           return;
         }
 
+        if (message.type === 'updateStartLine') {
+          void handleUpdateStartLine(message).catch(async (error: unknown) => {
+            await webviewPanel.webview.postMessage({
+              type: 'startLineError',
+              message: formatError(error)
+            });
+          });
+          return;
+        }
+
+        if (message.type === 'updateAutoRefresh') {
+          void handleUpdateAutoRefresh(message).catch(async () => {
+            await postAutoRefreshChanged();
+          });
+          return;
+        }
+
+        if (message.type === 'updateIndentGuides') {
+          void handleUpdateIndentGuides(message).catch(async () => {
+            await postIndentGuidesChanged();
+          });
+          return;
+        }
+
+        if (message.type === 'refresh') {
+          clearFileReloadTimer();
+          safeLoad();
+          return;
+        }
+
         if (message.type === 'rawContents') {
           void vscode.commands.executeCommand(
             'vscode.openWith',
@@ -315,10 +487,34 @@ export class JsonlViewerProvider implements vscode.CustomReadonlyEditorProvider<
 
     disposables.push(
       vscode.workspace.onDidChangeConfiguration((event) => {
+        const affectsAutoRefresh = event.affectsConfiguration(
+          `${SETTINGS_SECTION}.autoRefresh`
+        );
+        const affectsIndentGuides = event.affectsConfiguration(
+          `${SETTINGS_SECTION}.indentGuides`
+        );
+        if (affectsAutoRefresh) {
+          // Auto-refresh is a global UI preference, so configuration changes
+          // update controls and pending timers without re-reading the file.
+          currentSettings = getSettings();
+          if (!currentSettings.autoRefresh) {
+            clearFileReloadTimer();
+          }
+          void postAutoRefreshChanged();
+        }
+
+        if (affectsIndentGuides) {
+          currentSettings = getSettings();
+          void postIndentGuidesChanged();
+        }
+
         if (
           event.affectsConfiguration(`${SETTINGS_SECTION}.maxLines`) ||
           event.affectsConfiguration(`${SETTINGS_SECTION}.indent`)
         ) {
+          // Row count and indentation affect rendered data, so they still
+          // reload the current viewer.
+          currentSettings = getSettings();
           safeLoad();
         }
       })
@@ -368,9 +564,7 @@ export class JsonlViewerProvider implements vscode.CustomReadonlyEditorProvider<
       cancelCurrentWork();
       currentFileSnapshot = undefined;
       abortExactLineCount();
-      if (fileReloadTimer) {
-        clearTimeout(fileReloadTimer);
-      }
+      clearFileReloadTimer();
       for (const disposable of disposables) {
         disposable.dispose();
       }

@@ -1,5 +1,7 @@
 export const MAX_LINES_ERROR_MESSAGE =
   'Rows must be 0 or a positive whole number.';
+export const START_LINE_ERROR_MESSAGE =
+  'Start row must be a positive whole number.';
 
 export const EXTENSION_MESSAGE_TYPES = [
   'loading',
@@ -8,6 +10,9 @@ export const EXTENSION_MESSAGE_TYPES = [
   'lineCountProgress',
   'lineCountError',
   'maxLinesError',
+  'startLineError',
+  'autoRefreshChanged',
+  'indentGuidesChanged',
   'previewLoadStart',
   'previewLoadProgress',
   'fullIndexStart',
@@ -21,8 +26,12 @@ export const EXTENSION_MESSAGE_TYPES = [
 export const WEBVIEW_POSTED_MESSAGE_TYPES = [
   'ready',
   'rawContents',
+  'refresh',
   'cancelIndex',
   'fetchRows',
+  'updateStartLine',
+  'updateAutoRefresh',
+  'updateIndentGuides',
   'updateMaxLines'
 ] as const;
 
@@ -37,6 +46,7 @@ export type ViewState =
   | 'cancelled'
   | 'error';
 export type LineCountState = 'counting' | 'ready' | 'unavailable';
+export type RowInputErrorOwner = 'maxLines' | 'startLine';
 
 export interface JsonlJsonEntry {
   kind: 'json';
@@ -92,6 +102,7 @@ export interface JsonlMetadataPayload {
   lastModified: string;
   maxLines: number;
   indent: number;
+  startLine: number;
 }
 
 export interface JsonlDataPayload extends JsonlMetadataPayload {
@@ -128,6 +139,9 @@ export type ExtensionMessage =
   | { type: 'lineCountProgress'; payload: unknown }
   | { type: 'lineCountError'; message?: string }
   | { type: 'maxLinesError'; message?: string }
+  | { type: 'startLineError'; message?: string }
+  | { type: 'autoRefreshChanged'; autoRefresh: boolean }
+  | { type: 'indentGuidesChanged'; indentGuides: boolean }
   | { type: 'previewLoadStart'; payload: PreviewLoadPayload }
   | { type: 'previewLoadProgress'; payload: JsonlPreviewProgress }
   | { type: 'fullIndexStart'; payload: FullIndexStartPayload }
@@ -149,6 +163,7 @@ export type ExtensionMessage =
 export type WebviewPostMessage =
   | { type: 'ready' }
   | { type: 'rawContents' }
+  | { type: 'refresh' }
   | { type: 'cancelIndex' }
   | {
       type: 'fetchRows';
@@ -157,6 +172,9 @@ export type WebviewPostMessage =
       count: number;
       mode: RenderMode;
     }
+  | { type: 'updateStartLine'; value: number }
+  | { type: 'updateAutoRefresh'; value: boolean }
+  | { type: 'updateIndentGuides'; value: boolean }
   | { type: 'updateMaxLines'; value: number };
 
 export interface MaxLinesValidationResult {
@@ -276,4 +294,29 @@ export function getMaxLinesSubmission(
     value: result.value,
     submittedValue: result.nextValue
   };
+}
+
+export function clearRowInputErrorOwner(
+  activeOwner: RowInputErrorOwner | null,
+  changedOwner: RowInputErrorOwner
+): RowInputErrorOwner | null {
+  // Keep the shared error message attached to the field that produced it;
+  // editing the other field should clear only that field's invalid styling.
+  return activeOwner === changedOwner ? null : activeOwner;
+}
+
+export function isManualRefreshEnabled(
+  autoRefresh: boolean,
+  viewState: ViewState
+): boolean {
+  // Manual refresh is a recovery/action control for stable views only. Loading
+  // states keep it disabled so users cannot start overlapping load requests.
+  return (
+    !autoRefresh &&
+    (viewState === 'limited' ||
+      viewState === 'limitedVirtual' ||
+      viewState === 'fullReady' ||
+      viewState === 'cancelled' ||
+      viewState === 'error')
+  );
 }

@@ -56,6 +56,12 @@ test('package contributes JSONL viewer as the default editor association', async
         readonly priority?: unknown;
         readonly selector?: Array<{ readonly filenamePattern?: unknown }>;
       }>;
+      readonly configuration?: {
+        readonly properties?: Record<
+          string,
+          { readonly type?: unknown; readonly default?: unknown }
+        >;
+      };
     };
   };
 
@@ -123,6 +129,35 @@ test('package contributes JSONL viewer as the default editor association', async
         Array.isArray(language.extensions) &&
         language.extensions.includes('.jsonl')
     )
+  );
+  assert.deepEqual(
+    packageJson.contributes?.configuration?.properties?.[
+      'quickJsonlViewer.autoRefresh'
+    ],
+    {
+      type: 'boolean',
+      default: true,
+      description:
+        'Automatically refresh open JSONL viewers when the underlying file changes. Disable to refresh manually from the viewer toolbar.'
+    }
+  );
+  assert.deepEqual(
+    packageJson.contributes?.configuration?.properties?.[
+      'quickJsonlViewer.indentGuides'
+    ],
+    {
+      type: 'boolean',
+      default: true,
+      description: 'Show vertical indentation guides in Pretty print mode.'
+    }
+  );
+  // Guards the public settings surface: Start at line is per-view state, so
+  // existing user/workspace quickJsonlViewer.startLine values are ignored.
+  assert.equal(
+    packageJson.contributes?.configuration?.properties?.[
+      'quickJsonlViewer.startLine'
+    ],
+    undefined
   );
 });
 

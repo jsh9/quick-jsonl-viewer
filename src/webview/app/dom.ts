@@ -1,9 +1,13 @@
 export interface WebviewElements {
   readonly content: HTMLElement;
   readonly modeButtons: HTMLButtonElement[];
+  readonly refreshButton: HTMLButtonElement;
   readonly rawContentsButton: HTMLButtonElement;
   readonly fileSize: HTMLElement;
   readonly lineCount: HTMLElement;
+  readonly autoRefreshInput: HTMLInputElement;
+  readonly indentGuidesInput: HTMLInputElement;
+  readonly startInput: HTMLInputElement;
   readonly rowsInput: HTMLInputElement;
   readonly rowsError: HTMLElement;
   readonly modified: HTMLElement;
@@ -16,9 +20,13 @@ export function collectDomElements(): WebviewElements {
     modeButtons: Array.from(
       document.querySelectorAll<HTMLButtonElement>('[data-mode]')
     ),
+    refreshButton: getRequiredElement('refresh'),
     rawContentsButton: getRequiredElement('raw-contents'),
     fileSize: getRequiredElement('file-size'),
     lineCount: getRequiredElement('line-count'),
+    autoRefreshInput: getRequiredElement('auto-refresh'),
+    indentGuidesInput: getRequiredElement('indent-guides'),
+    startInput: getRequiredElement('start-input'),
     rowsInput: getRequiredElement('rows-input'),
     rowsError: getRequiredElement('rows-error'),
     modified: getRequiredElement('modified'),
@@ -33,7 +41,11 @@ export function setControlsDisabled(
   for (const button of elements.modeButtons) {
     button.disabled = disabled;
   }
+  elements.refreshButton.disabled = disabled;
   elements.rawContentsButton.disabled = disabled;
+  elements.autoRefreshInput.disabled = disabled;
+  elements.indentGuidesInput.disabled = disabled;
+  elements.startInput.disabled = disabled;
   elements.rowsInput.disabled = disabled;
 }
 

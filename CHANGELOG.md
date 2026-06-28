@@ -2,6 +2,13 @@
 
 All notable changes to Quick JSONL Viewer are documented in this file.
 
+## 0.1.0
+
+- Add per-view start-line controls for loading JSONL previews from later rows.
+- Add auto-refresh controls, manual refresh support, and indentation guide settings.
+- Add collapsible pretty-print rows, nested JSON blocks, and long string values.
+- Fix validation and manual refresh UI state for shared top-bar controls.
+
 ## 0.0.7
 
 - Keep JSONL diffs in VS Code's native diff editor while continuing to open JSONL files in Quick JSONL Viewer.

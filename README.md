@@ -29,6 +29,10 @@ It is hosted both on VS Code marketplace and Open VSX:
 
 ![](./images/screenshots/pretty-print.png)
 
+You can choose to preview JSONL from a certain line other than the initial one:
+
+![](./images/screenshots/start-from.png)
+
 "**Raw (wrapped)**" view:
 
 ![](./images/screenshots/raw-wrapped.png)
@@ -55,8 +59,11 @@ Use `Ctrl+F` on Windows/Linux or `Cmd+F` on macOS to search text in the rendered
 
 - `quickJsonlViewer.maxLines`: number of lines to show. Default is `20`.
 - `quickJsonlViewer.maxLines: 0`: index the full file and render visible rows on demand.
-- The info bar `Show [input] rows` control updates `quickJsonlViewer.maxLines` globally when you press Enter or leave the field.
+- The info bar `Show [input] lines` control updates `quickJsonlViewer.maxLines` globally when you press Enter or leave the field.
+- The info bar `Start at line [input]` control changes the first displayed line for the current viewer when you press Enter or leave the field.
 - `quickJsonlViewer.indent`: number of spaces for Pretty print formatting. Default is `2`; minimum is `1`.
+- `quickJsonlViewer.autoRefresh`: automatically refresh open viewers when the underlying file changes. Default is `true`. The info bar `Auto-refresh` checkbox updates this setting globally; set it to `false` to refresh manually from the viewer toolbar.
+- `quickJsonlViewer.indentGuides`: show vertical indentation guides in Pretty print mode. Default is `true`. The info bar `Indent guides` checkbox updates this setting globally for all open viewers.
 
 ## 5. Indexed Mode
 

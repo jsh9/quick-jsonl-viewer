@@ -57,6 +57,30 @@ test('preview reading reports progress for limited loads', async () => {
   assert.equal(progress.at(-1)?.percent, 100);
 });
 
+test('preview reading can start from a later line', async () => {
+  const filePath = await writeFixture(
+    'middle-preview.jsonl',
+    Array.from({ length: 10 }, (_, index) => JSON.stringify({ index })).join(
+      '\n'
+    )
+  );
+
+  const preview = await readJsonlPreview(filePath, {
+    maxLines: 3,
+    indent: 2,
+    startLine: 5
+  });
+
+  assert.equal(preview.loadedLineCount, 3);
+  assert.deepEqual(
+    preview.entries.map((entry) => entry.lineNumber),
+    [5, 6, 7]
+  );
+  assert.match(preview.plainText, /"index":4/);
+  assert.doesNotMatch(preview.plainText, /"index":3/);
+  assert.doesNotMatch(preview.plainText, /"index":7/);
+});
+
 test('maxLines set to 0 can still read all lines through the preview helper', async () => {
   const filePath = await writeFixture(
     'all-lines.jsonl',

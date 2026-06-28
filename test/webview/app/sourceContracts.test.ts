@@ -19,8 +19,10 @@ const SOURCE_FILES = [
   'src/webview/app/dom.ts',
   'src/webview/app/render.ts',
   'src/webview/app/sourceContracts.ts',
+  'src/webview/lib/collapse.ts',
   'src/webview/lib/format.ts',
   'src/webview/lib/highlight.ts',
+  'src/webview/lib/jsonFolding.ts',
   'src/webview/lib/protocol.ts',
   'src/webview/lib/virtualScroll.ts',
   'out/webview/main.js'
@@ -50,18 +52,32 @@ test('custom editor focuses the webview so find shortcuts work after open', asyn
 
   assert.match(
     source,
-    /webviewPanel\.webview\.html = getHtml\(path\.basename\(document\.uri\.fsPath\)\);\s*webviewPanel\.reveal\(webviewPanel\.viewColumn, false\);/
+    /webviewPanel\.webview\.html = getHtml\(\s*path\.basename\(document\.uri\.fsPath\),\s*currentSettings\.autoRefresh,\s*currentSettings\.indentGuides\s*\);\s*webviewPanel\.reveal\(webviewPanel\.viewColumn, false\);/
   );
   assert.match(source, /<main id="content" tabindex="-1">/);
   assert.match(source, /content\.focus\(\{ preventScroll: true \}\);/);
 });
 
-test('webview top bar labels use colons, separators, and Show rows wording', async () => {
+test('webview top bar labels use colons, separators, and Start/Show line wording', async () => {
   const source = await readExtensionSource();
 
+  // Locks the compact top-bar copy because it distinguishes per-view start
+  // state from the global row-count control.
   assert.match(source, /<strong>Size:<\/strong>/);
   assert.match(source, /<strong>Total lines:<\/strong>/);
-  assert.match(source, /<strong>Show<\/strong>[\s\S]*<span>rows<\/span>/);
+  assert.match(
+    source,
+    /<strong>Start at line<\/strong>[\s\S]*id="start-input"/
+  );
+  assert.match(source, /<strong>Show<\/strong>[\s\S]*<span>lines<\/span>/);
+  assert.match(
+    source,
+    /id="auto-refresh" type="checkbox"\$\{autoRefreshChecked\}/
+  );
+  assert.match(
+    source,
+    /id="indent-guides" type="checkbox"\$\{indentGuidesChecked\}/
+  );
   assert.match(source, /<strong>Modified:<\/strong>/);
   assert.match(source, /<span id="preview-status" class="info-item"><\/span>/);
   assert.match(
@@ -86,9 +102,97 @@ test('raw-line virtual rows stay unwrapped without fixed-height clipping', async
   );
 });
 
+test('pretty-print rows expose row-level collapse controls', async () => {
+  const source = await readExtensionSource();
+
+  // Without a DOM harness, this locks the click path that flips row-collapse
+  // state and rerenders the entry, not just the existence of the button.
+  assert.match(source, /className = 'collapse-toggle'/);
+  assert.match(source, /setAttribute\('aria-expanded'/);
+  assert.match(source, /getCollapsedPreview\(entry\.raw\)/);
+  assert.match(source, /getHiddenLineCountText\(entry\.formatted\)/);
+  assert.match(
+    source,
+    /function toggleCollapsedLine\([\s\S]*?collapsedPrettyLines\.has\(entry\.lineNumber\)[\s\S]*?collapsedPrettyLines\.delete\(entry\.lineNumber\)[\s\S]*?collapsedPrettyLines\.add\(entry\.lineNumber\)[\s\S]*?replaceRenderedEntry\(entry, rowMode, virtualized, rowIndex\);/
+  );
+  assert.match(
+    source,
+    /\.collapsed-preview \{[\s\S]*?text-overflow: ellipsis;/
+  );
+});
+
+test('pretty-print JSON blocks expose nested collapse controls', async () => {
+  const source = await readExtensionSource();
+
+  // Verifies nested block/value toggles update keyed collapse state and replace
+  // the entry; otherwise the controls can render but clicks become no-ops.
+  assert.match(source, /getJsonFoldRanges\(entry\.formatted\)/);
+  assert.match(source, /className = 'json-fold-toggle'/);
+  assert.match(source, /getCollapsedJsonLine\(lines, range\)/);
+  assert.match(source, /getLongJsonStringValueLine\(lines\[lineIndex\]\)/);
+  assert.match(source, /getJsonValueFoldKey\(entry\.lineNumber, lineIndex\)/);
+  assert.match(source, /appendHighlightedJson\(code, codeText\);/);
+  assert.match(
+    source,
+    /function toggleJsonBlock\([\s\S]*?getJsonFoldKey\(entry\.lineNumber, lineIndex\)[\s\S]*?collapsedJsonBlocks\.delete\(foldKey\)[\s\S]*?collapsedJsonBlocks\.add\(foldKey\)[\s\S]*?replaceRenderedEntry\(entry, rowMode, virtualized, rowIndex\);/
+  );
+  assert.match(
+    source,
+    /function toggleJsonValue\([\s\S]*?getJsonValueFoldKey\(entry\.lineNumber, lineIndex\)[\s\S]*?collapsedJsonBlocks\.delete\(foldKey\)[\s\S]*?collapsedJsonBlocks\.add\(foldKey\)[\s\S]*?replaceRenderedEntry\(entry, rowMode, virtualized, rowIndex\);/
+  );
+  assert.match(source, /\.pretty-json-line \{[\s\S]*?display: flex;/);
+  assert.match(
+    source,
+    /\.pretty-json-prefix \{[\s\S]*?background-repeat: repeat-x;/
+  );
+  assert.match(
+    source,
+    /\.indent-guides-enabled \.pretty-json-prefix \{[\s\S]*?repeating-linear-gradient/
+  );
+});
+
 test('rows input rejects empty values before posting maxLines updates', async () => {
   const source = await readExtensionSource();
 
+  // Guards the shared error element: clearing one numeric field must not hide
+  // an unrelated invalid state owned by the other field.
+  assert.match(
+    source,
+    /let rowsErrorOwner: RowInputErrorOwner \| null = null;/
+  );
+  assert.match(
+    source,
+    /rowsInput\.addEventListener\('input'[\s\S]*?clearRowsError\('maxLines'\);/
+  );
+  assert.match(
+    source,
+    /startInput\.addEventListener\('input'[\s\S]*?clearRowsError\('startLine'\);/
+  );
+  assert.match(
+    source,
+    /function showRowsError\(message: string\)[\s\S]*?rowsErrorOwner = 'maxLines';[\s\S]*?rowsInput\.classList\.add\('invalid'\);/
+  );
+  assert.match(
+    source,
+    /function showStartLineError\(message: string\)[\s\S]*?rowsErrorOwner = 'startLine';[\s\S]*?startInput\.classList\.add\('invalid'\);/
+  );
+  assert.match(
+    source,
+    /function clearRowsError\(owner: RowInputErrorOwner\)[\s\S]*?clearRowInputErrorOwner\(rowsErrorOwner, owner\)[\s\S]*?if \(!rowsErrorOwner\) \{[\s\S]*?rowsError\.textContent = '';/
+  );
+  assert.match(
+    source,
+    /function clearAllRowsErrors\(\)[\s\S]*?rowsErrorOwner = null;[\s\S]*?startInput\.classList\.remove\('invalid'\);[\s\S]*?rowsInput\.classList\.remove\('invalid'\);/
+  );
+  assert.match(
+    source,
+    /lastSubmittedMaxLines = nextValue;[\s\S]*?clearRowsError\('maxLines'\);/
+  );
+  assert.match(
+    source,
+    /lastSubmittedStartLine = nextValue;[\s\S]*?clearRowsError\('startLine'\);/
+  );
+  assert.match(source, /clearRowsError: clearAllRowsErrors/);
   assert.match(source, /const rawValue = rowsInput\.value\.trim\(\);/);
   assert.match(
     source,
@@ -158,8 +262,9 @@ test('open viewers reload when their file changes', async () => {
   );
   assert.match(
     source,
-    /if \(fileReloadTimer\) \{[\s\S]*?clearTimeout\(fileReloadTimer\);[\s\S]*?\}/
+    /const clearFileReloadTimer = \(\): void => \{[\s\S]*?clearTimeout\(fileReloadTimer\);[\s\S]*?fileReloadTimer = undefined;/
   );
+  assert.match(source, /clearFileReloadTimer\(\);/);
 });
 
 test('line count progress is posted and rendered', async () => {
@@ -194,9 +299,9 @@ test('line counts are cached across settings-only reloads', async () => {
       source
     )?.[1] ?? '';
 
-  // Verifies row-count settings can rerender the viewer without restarting
-  // the file-scoped exact count. Only file snapshot changes should invalidate
-  // cached or in-flight line-count work.
+  // Verifies data-affecting settings can rerender without restarting the
+  // file-scoped count, while auto-refresh only reconciles controls. Only file
+  // snapshot changes should invalidate cached or in-flight line-count work.
   assert.match(
     source,
     /interface FileSnapshot \{[\s\S]*?readonly size: number;[\s\S]*?readonly mtimeMs: number;/
@@ -210,6 +315,7 @@ test('line counts are cached across settings-only reloads', async () => {
     /let exactLineCountRequest: ExactLineCountRequest \| undefined;/
   );
   assert.match(configurationReload, /safeLoad\(\);/);
+  assert.match(configurationReload, /postAutoRefreshChanged\(\);/);
   assert.doesNotMatch(
     configurationReload,
     /invalidateExactLineCount|abortExactLineCount|ensureExactLineCount/
@@ -366,6 +472,8 @@ test('webview avoids unsafe HTML injection APIs', async () => {
 test('webview handles the expected extension message protocol', async () => {
   const source = await readExtensionSource();
 
+  // Keeps source-level protocol handling in sync with shared constants;
+  // preference messages are state-only and should not be dropped silently.
   for (const messageType of [
     'loading',
     'data',
@@ -373,6 +481,9 @@ test('webview handles the expected extension message protocol', async () => {
     'lineCountProgress',
     'lineCountError',
     'maxLinesError',
+    'startLineError',
+    'autoRefreshChanged',
+    'indentGuidesChanged',
     'previewLoadStart',
     'previewLoadProgress',
     'fullIndexStart',
@@ -388,8 +499,12 @@ test('webview handles the expected extension message protocol', async () => {
   for (const postedType of [
     'ready',
     'rawContents',
+    'refresh',
     'cancelIndex',
     'fetchRows',
+    'updateStartLine',
+    'updateAutoRefresh',
+    'updateIndentGuides',
     'updateMaxLines'
   ]) {
     assert.match(source, new RegExp(`type: '${postedType}'`));
@@ -429,9 +544,44 @@ test('webview rows input validates, de-duplicates, and posts numeric updates', a
 test('webview exposes all render modes and preserves virtual-scroll helpers', async () => {
   const source = await readExtensionSource();
 
+  // Locks initial server-rendered preference controls because they are visible
+  // before any extension message can reconcile checkbox state.
   assert.match(source, /data-mode="pretty"/);
   assert.match(source, /data-mode="wrappedRaw"/);
   assert.match(source, /data-mode="rawLine"/);
+  assert.match(
+    source,
+    /const refreshButtonHidden = autoRefresh \? ' hidden' : '';/
+  );
+  assert.match(
+    source,
+    /const autoRefreshChecked = autoRefresh \? ' checked' : '';/
+  );
+  assert.match(
+    source,
+    /const indentGuidesChecked = indentGuides \? ' checked' : '';/
+  );
+  assert.match(
+    source,
+    /const indentGuidesClass = indentGuides[\s\S]*\? ' class="indent-guides-enabled"'[\s\S]*: '';/
+  );
+  assert.match(source, /<body\$\{indentGuidesClass\}>/);
+  assert.match(
+    source,
+    /<div class="actions">[\s\S]*?<button type="button" id="refresh"\$\{refreshButtonHidden\}>Refresh<\/button>[\s\S]*?<div class="mode-tabs"/
+  );
+  assert.match(source, /#refresh \{[\s\S]*?min-width: auto;/);
+  const modeTabsHtml =
+    /<div class="mode-tabs"[\s\S]*?<\/div>/.exec(source)?.[0] ?? '';
+  assert.doesNotMatch(modeTabsHtml, /id="refresh"\$\{refreshButtonHidden\}/);
+  assert.match(
+    source,
+    /id="auto-refresh" type="checkbox"\$\{autoRefreshChecked\}>/
+  );
+  assert.match(
+    source,
+    /id="indent-guides" type="checkbox"\$\{indentGuidesChecked\}>/
+  );
   assert.match(source, /id="raw-contents"/);
   assert.match(source, /function renderLimitedVirtualViewer\(\) \{/);
   assert.match(source, /function renderFullViewer\(\) \{/);
@@ -442,4 +592,66 @@ test('webview exposes all render modes and preserves virtual-scroll helpers', as
     /function renderVirtualRows\(start, entries, totalRows, rowMode\) \{/
   );
   assert.match(source, /function measureRenderedRows\(rowMode = mode\) \{/);
+});
+
+test('indent guides checkbox updates render state without reloading data', async () => {
+  const source = await readExtensionSource();
+
+  // Verifies the global preference toggles checkbox and CSS state only, so
+  // file-load payloads cannot overwrite newer preference state.
+  assert.match(
+    source,
+    /indentGuidesInput\.addEventListener\('change'[\s\S]*?type: 'updateIndentGuides'/
+  );
+  assert.match(
+    source,
+    /function updateIndentGuidesControls\(indentGuides[\s\S]*?indentGuidesInput\.checked = indentGuides;[\s\S]*?document\.body\.classList\.toggle\('indent-guides-enabled', indentGuides\);/
+  );
+  assert.match(
+    source,
+    /if \(message\.type === 'indentGuidesChanged'\) \{[\s\S]*?updateIndentGuidesControls\(message\.indentGuides\);/
+  );
+  assert.doesNotMatch(source, /message\.payload\.indentGuides/);
+});
+
+test('manual refresh button is shown only when auto-refresh is disabled', async () => {
+  const source = await readExtensionSource();
+
+  // Verifies every auto-refresh source updates both controls through one path,
+  // so file-load payloads cannot overwrite checkbox/Refresh state. Error and
+  // cancelled states must still expose Refresh as a manual recovery action.
+  assert.match(source, /let autoRefreshEnabled = autoRefreshInput\.checked;/);
+  assert.match(
+    source,
+    /autoRefreshInput\.addEventListener\('change'[\s\S]*?type: 'updateAutoRefresh'/
+  );
+  assert.match(
+    source,
+    /refreshButton\.addEventListener\('click'[\s\S]*?type: 'refresh'/
+  );
+  assert.match(
+    source,
+    /function updateAutoRefreshControls\(autoRefresh[\s\S]*?autoRefreshEnabled = autoRefresh;[\s\S]*?autoRefreshInput\.checked = autoRefresh;[\s\S]*?refreshButton\.hidden = autoRefresh;[\s\S]*?syncRefreshButtonState\(\);/
+  );
+  assert.match(
+    source,
+    /function setControlsDisabled\(disabled: boolean\)[\s\S]*?setDomControlsDisabled\(elements, disabled\);[\s\S]*?syncRefreshButtonState\(\);/
+  );
+  assert.match(
+    source,
+    /function syncRefreshButtonState\(\)[\s\S]*?refreshButton\.disabled = !isManualRefreshEnabled\([\s\S]*?autoRefreshEnabled,[\s\S]*?viewState/
+  );
+  assert.match(
+    source,
+    /function renderError\(message[\s\S]*?setControlsDisabled\(true\);[\s\S]*?syncRefreshButtonState\(\);/
+  );
+  assert.match(
+    source,
+    /function renderCancelled\(\)[\s\S]*?setControlsDisabled\(true\);[\s\S]*?syncRefreshButtonState\(\);/
+  );
+  assert.match(
+    source,
+    /if \(message\.type === 'autoRefreshChanged'\) \{[\s\S]*?updateAutoRefreshControls\(message\.autoRefresh\);/
+  );
+  assert.doesNotMatch(source, /message\.payload\.autoRefresh/);
 });

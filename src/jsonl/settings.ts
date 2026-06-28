@@ -2,20 +2,35 @@ import { INDEXED_PREVIEW_LINE_THRESHOLD } from '../shared/jsonlConstants';
 
 export const DEFAULT_MAX_LINES = 20;
 export const DEFAULT_INDENT = 2;
+export const DEFAULT_AUTO_REFRESH = true;
+export const DEFAULT_INDENT_GUIDES = true;
+export const DEFAULT_START_LINE = 1;
 export { INDEXED_PREVIEW_LINE_THRESHOLD } from '../shared/jsonlConstants';
 
 export interface ViewerSettings {
   readonly maxLines: number;
   readonly indent: number;
+  readonly autoRefresh: boolean;
+  readonly indentGuides: boolean;
+}
+
+export interface ViewerLoadSettings {
+  readonly maxLines: number;
+  readonly indent: number;
+  readonly startLine: number;
 }
 
 export function normalizeViewerSettings(input: {
   readonly maxLines?: unknown;
   readonly indent?: unknown;
+  readonly autoRefresh?: unknown;
+  readonly indentGuides?: unknown;
 }): ViewerSettings {
   return {
     maxLines: normalizeInteger(input.maxLines, DEFAULT_MAX_LINES, 0),
-    indent: normalizeInteger(input.indent, DEFAULT_INDENT, 1)
+    indent: normalizeInteger(input.indent, DEFAULT_INDENT, 1),
+    autoRefresh: normalizeBoolean(input.autoRefresh, DEFAULT_AUTO_REFRESH),
+    indentGuides: normalizeBoolean(input.indentGuides, DEFAULT_INDENT_GUIDES)
   };
 }
 
@@ -23,11 +38,26 @@ export function shouldUseIndexedPreview(maxLines: number): boolean {
   return maxLines === 0 || maxLines >= INDEXED_PREVIEW_LINE_THRESHOLD;
 }
 
+export function shouldUseIndexedLoad(
+  maxLines: number,
+  startLine: number
+): boolean {
+  // Distant start-line jumps still require a prefix scan. Route them
+  // through indexed loading so the UI can report progress and reuse
+  // row-offset fetching instead of silently skipping many lines.
+  return (
+    shouldUseIndexedPreview(maxLines) ||
+    startLine > INDEXED_PREVIEW_LINE_THRESHOLD
+  );
+}
+
 export function getDisplayRowCount(
   lineCount: number,
-  maxLines: number
+  maxLines: number,
+  startLine = DEFAULT_START_LINE
 ): number {
-  return maxLines === 0 ? lineCount : Math.min(lineCount, maxLines);
+  const availableLines = Math.max(0, lineCount - (startLine - 1));
+  return maxLines === 0 ? availableLines : Math.min(availableLines, maxLines);
 }
 
 function normalizeInteger(
@@ -44,4 +74,8 @@ function normalizeInteger(
   }
 
   return value;
+}
+
+function normalizeBoolean(value: unknown, fallback: boolean): boolean {
+  return typeof value === 'boolean' ? value : fallback;
 }

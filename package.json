@@ -2,7 +2,7 @@
   "name": "quick-jsonl-viewer",
   "displayName": "Quick JSONL Viewer",
   "description": "View and preview large JSONL files in a readonly, formatted VS Code custom editor.",
-  "version": "0.0.7",
+  "version": "0.1.0",
   "publisher": "jsh9",
   "license": "MIT",
   "icon": "images/icon.png",
@@ -103,6 +103,16 @@
           "default": 2,
           "minimum": 1,
           "description": "Number of spaces used to indent JSON in Pretty print mode."
+        },
+        "quickJsonlViewer.autoRefresh": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically refresh open JSONL viewers when the underlying file changes. Disable to refresh manually from the viewer toolbar."
+        },
+        "quickJsonlViewer.indentGuides": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show vertical indentation guides in Pretty print mode."
         }
       }
     },

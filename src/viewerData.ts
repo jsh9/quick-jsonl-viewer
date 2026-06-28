@@ -5,13 +5,14 @@ import * as vscode from 'vscode';
 import {
   countJsonlLines,
   formatFileSize,
+  getDisplayRowCount,
   indexJsonlFile,
   isAbortError,
   JsonlLineIndex,
   JsonlPreview,
   readJsonlPreview,
-  shouldUseIndexedPreview,
-  ViewerSettings
+  shouldUseIndexedLoad,
+  ViewerLoadSettings
 } from './jsonl';
 import { formatError } from './viewerProtocol';
 
@@ -21,6 +22,7 @@ export interface JsonlDataPayload {
   readonly lastModified: string;
   readonly maxLines: number;
   readonly indent: number;
+  readonly startLine: number;
   readonly lineCount: number | null;
   readonly preview: JsonlPreview;
 }
@@ -56,7 +58,7 @@ export async function postJsonlData(
   generation: number,
   getLatestGeneration: () => number,
   signal: AbortSignal,
-  settings: ViewerSettings,
+  settings: ViewerLoadSettings,
   setFullIndex: (index: JsonlLineIndex) => void,
   exactLineCounts: ExactLineCountCoordinator
 ): Promise<void> {
@@ -79,11 +81,18 @@ export async function postJsonlData(
       fileSize: formatFileSize(stats.size),
       lastModified: stats.mtime.toLocaleString(),
       maxLines: settings.maxLines,
-      indent: settings.indent
+      indent: settings.indent,
+      startLine: settings.startLine
     };
 
-    if (shouldUseIndexedPreview(settings.maxLines)) {
-      const lineLimit = settings.maxLines > 0 ? settings.maxLines : undefined;
+    if (shouldUseIndexedLoad(settings.maxLines, settings.startLine)) {
+      // Finite indexed previews only need offsets through the requested
+      // window. Stopping after startLine + maxLines avoids indexing rows the
+      // UI will not show for this page.
+      const lineLimit =
+        settings.maxLines > 0
+          ? settings.startLine - 1 + settings.maxLines
+          : undefined;
       await webview.postMessage({
         type: 'fullIndexStart',
         payload: {
@@ -122,7 +131,11 @@ export async function postJsonlData(
         payload: {
           ...metadata,
           lineCount: lineCount ?? null,
-          totalRows: index.indexedLineCount,
+          totalRows: getDisplayRowCount(
+            index.indexedLineCount,
+            settings.maxLines,
+            settings.startLine
+          ),
           isComplete: index.isComplete
         }
       });

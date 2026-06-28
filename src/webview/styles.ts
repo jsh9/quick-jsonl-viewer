@@ -68,6 +68,17 @@ export function getWebviewStyles(): string {
       white-space: nowrap;
     }
 
+    .preference-control {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      white-space: nowrap;
+    }
+
+    .preference-control input {
+      margin: 0;
+    }
+
     .rows-input {
       appearance: textfield;
       -moz-appearance: textfield;
@@ -139,6 +150,10 @@ export function getWebviewStyles(): string {
       outline-offset: 2px;
     }
 
+    #refresh {
+      min-width: auto;
+    }
+
     .mode-tabs {
       display: flex;
       align-items: center;
@@ -205,11 +220,53 @@ export function getWebviewStyles(): string {
     }
 
     .line-number {
+      display: flex;
+      align-items: flex-start;
+      justify-content: flex-end;
+      gap: 4px;
       padding: 10px 8px;
       color: var(--vscode-editorLineNumber-foreground);
       background: var(--vscode-editorGutter-background, var(--vscode-editor-background));
       text-align: right;
       user-select: none;
+    }
+
+    .line-number-text {
+      line-height: 1.45;
+    }
+
+    .collapse-toggle {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      flex: 0 0 18px;
+      width: 18px;
+      min-width: 18px;
+      height: 18px;
+      margin: 1px 0 0;
+      border: 0;
+      border-radius: 3px;
+      padding: 0;
+      color: inherit;
+      background: transparent;
+    }
+
+    .collapse-toggle::before {
+      content: "";
+      width: 0;
+      height: 0;
+      border-top: 4px solid transparent;
+      border-bottom: 4px solid transparent;
+      border-left: 5px solid currentColor;
+      transform: rotate(90deg);
+    }
+
+    .collapse-toggle[aria-expanded="false"]::before {
+      transform: none;
+    }
+
+    .collapse-toggle:hover:not(:disabled) {
+      background: var(--vscode-toolbar-hoverBackground, var(--vscode-button-secondaryHoverBackground));
     }
 
     .line-body {
@@ -233,6 +290,98 @@ export function getWebviewStyles(): string {
     .entry.raw-line pre {
       white-space: pre;
       overflow-wrap: normal;
+    }
+
+    .collapsed-summary {
+      display: flex;
+      align-items: baseline;
+      gap: 10px;
+      min-width: 0;
+    }
+
+    .collapsed-preview {
+      flex: 1 1 auto;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      overflow-wrap: normal;
+    }
+
+    .collapsed-meta {
+      flex: 0 0 auto;
+      color: var(--vscode-descriptionForeground);
+      white-space: nowrap;
+    }
+
+    .pretty-json {
+      min-width: 0;
+    }
+
+    .pretty-json-line {
+      display: flex;
+      align-items: flex-start;
+      min-width: 0;
+    }
+
+    .pretty-json-prefix {
+      flex: 0 0 auto;
+      min-height: 1.45em;
+      background-repeat: repeat-x;
+      background-size: var(--json-indent-step, 2ch) 100%;
+    }
+
+    .indent-guides-enabled .pretty-json-prefix {
+      background-image: repeating-linear-gradient(
+        to right,
+        transparent 0,
+        transparent calc(var(--json-indent-step, 2ch) - 1px),
+        var(--vscode-editorIndentGuide-background, var(--vscode-editorWidget-border, rgba(127, 127, 127, 0.28))) calc(var(--json-indent-step, 2ch) - 1px),
+        var(--vscode-editorIndentGuide-background, var(--vscode-editorWidget-border, rgba(127, 127, 127, 0.28))) var(--json-indent-step, 2ch)
+      );
+    }
+
+    .pretty-json-code {
+      flex: 1 1 auto;
+      min-width: 0;
+    }
+
+    .json-fold-toggle,
+    .json-fold-spacer {
+      flex: 0 0 18px;
+      width: 18px;
+      min-width: 18px;
+      height: 1.45em;
+      margin: 0 2px 0 0;
+    }
+
+    .json-fold-toggle {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border: 0;
+      border-radius: 3px;
+      padding: 0;
+      color: var(--vscode-editorLineNumber-foreground);
+      background: transparent;
+    }
+
+    .json-fold-toggle::before {
+      content: "";
+      width: 0;
+      height: 0;
+      border-top: 4px solid transparent;
+      border-bottom: 4px solid transparent;
+      border-left: 5px solid currentColor;
+      transform: rotate(90deg);
+    }
+
+    .json-fold-toggle[aria-expanded="false"]::before {
+      transform: none;
+    }
+
+    .json-fold-toggle:hover:not(:disabled) {
+      background: var(--vscode-toolbar-hoverBackground, var(--vscode-button-secondaryHoverBackground));
     }
 
     .json-token.key {
@@ -336,6 +485,16 @@ export function getWebviewStyles(): string {
 
       .mode-button {
         flex: 1 1 auto;
+      }
+
+      .collapsed-summary {
+        align-items: stretch;
+        flex-direction: column;
+        gap: 4px;
+      }
+
+      .collapsed-meta {
+        white-space: normal;
       }
     }`;
 }
