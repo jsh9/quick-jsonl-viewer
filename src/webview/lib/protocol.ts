@@ -46,6 +46,7 @@ export type ViewState =
   | 'cancelled'
   | 'error';
 export type LineCountState = 'counting' | 'ready' | 'unavailable';
+export type RowInputErrorOwner = 'maxLines' | 'startLine';
 
 export interface JsonlJsonEntry {
   kind: 'json';
@@ -293,4 +294,29 @@ export function getMaxLinesSubmission(
     value: result.value,
     submittedValue: result.nextValue
   };
+}
+
+export function clearRowInputErrorOwner(
+  activeOwner: RowInputErrorOwner | null,
+  changedOwner: RowInputErrorOwner
+): RowInputErrorOwner | null {
+  // Keep the shared error message attached to the field that produced it;
+  // editing the other field should clear only that field's invalid styling.
+  return activeOwner === changedOwner ? null : activeOwner;
+}
+
+export function isManualRefreshEnabled(
+  autoRefresh: boolean,
+  viewState: ViewState
+): boolean {
+  // Manual refresh is a recovery/action control for stable views only. Loading
+  // states keep it disabled so users cannot start overlapping load requests.
+  return (
+    !autoRefresh &&
+    (viewState === 'limited' ||
+      viewState === 'limitedVirtual' ||
+      viewState === 'fullReady' ||
+      viewState === 'cancelled' ||
+      viewState === 'error')
+  );
 }

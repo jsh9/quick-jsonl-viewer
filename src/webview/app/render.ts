@@ -90,6 +90,9 @@ export interface RendererContext {
   readonly requestVisibleRows: () => void;
   readonly requestLimitedVisibleRows: () => void;
   readonly updateModeButtons: () => void;
+  // Refresh enablement depends on app-owned preference and view state, so
+  // renderers call back after changing disabled state instead of duplicating it.
+  readonly syncRefreshButtonState: () => void;
   readonly setControlsDisabled: (disabled: boolean) => void;
   readonly clearRowsError: () => void;
 }
@@ -107,6 +110,7 @@ export function createRenderer(context: RendererContext): Renderer {
   const requestVisibleRows = context.requestVisibleRows;
   const requestLimitedVisibleRows = context.requestLimitedVisibleRows;
   const updateModeButtons = context.updateModeButtons;
+  const syncRefreshButtonState = context.syncRefreshButtonState;
   const setControlsDisabled = context.setControlsDisabled;
   const clearRowsError = context.clearRowsError;
   const collapsedPrettyLines = new Set<number>();
@@ -137,7 +141,7 @@ export function createRenderer(context: RendererContext): Renderer {
     collapsedPrettyLines.clear();
     collapsedJsonBlocks.clear();
     setControlsDisabled(true);
-    enableRefreshWhenVisible();
+    syncRefreshButtonState();
     fileSize.textContent = 'Unavailable';
     lineCount.textContent = 'Unavailable';
     startInput.value = '';
@@ -155,7 +159,7 @@ export function createRenderer(context: RendererContext): Renderer {
 
   function renderCancelled(): void {
     setControlsDisabled(true);
-    enableRefreshWhenVisible();
+    syncRefreshButtonState();
     previewStatus.textContent = 'Loading cancelled';
     content.replaceChildren(
       status(
@@ -456,11 +460,6 @@ export function createRenderer(context: RendererContext): Renderer {
     lineCount.textContent = progress
       ? 'Counting ' + formatPercent(progress.percent)
       : 'Counting...';
-  }
-
-  function enableRefreshWhenVisible(): void {
-    const refreshButton = context.elements.refreshButton;
-    refreshButton.disabled = Boolean(refreshButton.hidden);
   }
 
   function getVisibleRangeLabel(startLine: number, loadedLineCount: number) {

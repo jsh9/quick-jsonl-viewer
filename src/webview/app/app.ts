@@ -13,7 +13,10 @@ import {
   type JsonlPreviewProgress,
   type PreviewLoadPayload,
   type RenderMode,
+  type RowInputErrorOwner,
   type ViewState,
+  clearRowInputErrorOwner,
+  isManualRefreshEnabled,
   normalizeLineCountProgress,
   withLineCountState
 } from '../lib/protocol';
@@ -55,6 +58,10 @@ export function createWebviewApp(
   let animationFrame = 0;
   let lastSubmittedMaxLines = '';
   let lastSubmittedStartLine = '';
+  // Both numeric inputs share one visible error slot. Track the owner so
+  // typing in one field does not clear an unrelated invalid state in the other.
+  let rowsErrorOwner: RowInputErrorOwner | null = null;
+  let autoRefreshEnabled = autoRefreshInput.checked;
 
   const renderer = createRenderer({
     vscode,
@@ -90,8 +97,9 @@ export function createWebviewApp(
     requestVisibleRows,
     requestLimitedVisibleRows,
     updateModeButtons,
+    syncRefreshButtonState,
     setControlsDisabled,
-    clearRowsError
+    clearRowsError: clearAllRowsErrors
   });
   const {
     setLineCountText,
@@ -110,6 +118,7 @@ export function createWebviewApp(
 
   setVirtualScrollMode(mode);
   content.focus({ preventScroll: true });
+  syncRefreshButtonState();
 
   for (const button of modeButtons) {
     button.addEventListener('click', () => {
@@ -178,11 +187,11 @@ export function createWebviewApp(
   });
 
   rowsInput.addEventListener('input', () => {
-    clearRowsError();
+    clearRowsError('maxLines');
   });
 
   startInput.addEventListener('input', () => {
-    clearRowsError();
+    clearRowsError('startLine');
   });
 
   window.addEventListener(
@@ -480,8 +489,10 @@ export function createWebviewApp(
   // Settings can change outside this webview, so both controls must reconcile
   // from provider messages instead of only the local change event.
   function updateAutoRefreshControls(autoRefresh: boolean): void {
+    autoRefreshEnabled = autoRefresh;
     autoRefreshInput.checked = autoRefresh;
     refreshButton.hidden = autoRefresh;
+    syncRefreshButtonState();
   }
 
   function updateIndentGuidesControls(indentGuides: boolean): void {
@@ -491,6 +502,17 @@ export function createWebviewApp(
 
   function setControlsDisabled(disabled: boolean): void {
     setDomControlsDisabled(elements, disabled);
+    syncRefreshButtonState();
+  }
+
+  // Derive Refresh availability from app state after every control-state
+  // transition; auto-refresh config changes can arrive while a renderer has
+  // intentionally disabled the rest of the toolbar.
+  function syncRefreshButtonState(): void {
+    refreshButton.disabled = !isManualRefreshEnabled(
+      autoRefreshEnabled,
+      viewState
+    );
   }
 
   function submitMaxLines(): void {
@@ -516,7 +538,7 @@ export function createWebviewApp(
     }
 
     lastSubmittedMaxLines = nextValue;
-    clearRowsError();
+    clearRowsError('maxLines');
     vscode.postMessage({
       type: 'updateMaxLines',
       value
@@ -546,7 +568,7 @@ export function createWebviewApp(
     }
 
     lastSubmittedStartLine = nextValue;
-    clearRowsError();
+    clearRowsError('startLine');
     vscode.postMessage({
       type: 'updateStartLine',
       value
@@ -554,16 +576,32 @@ export function createWebviewApp(
   }
 
   function showRowsError(message: string): void {
+    rowsErrorOwner = 'maxLines';
     rowsInput.classList.add('invalid');
     rowsError.textContent = message;
   }
 
   function showStartLineError(message: string): void {
+    rowsErrorOwner = 'startLine';
     startInput.classList.add('invalid');
     rowsError.textContent = message;
   }
 
-  function clearRowsError(): void {
+  function clearRowsError(owner: RowInputErrorOwner): void {
+    rowsErrorOwner = clearRowInputErrorOwner(rowsErrorOwner, owner);
+    if (owner === 'maxLines') {
+      rowsInput.classList.remove('invalid');
+    } else {
+      startInput.classList.remove('invalid');
+    }
+
+    if (!rowsErrorOwner) {
+      rowsError.textContent = '';
+    }
+  }
+
+  function clearAllRowsErrors(): void {
+    rowsErrorOwner = null;
     startInput.classList.remove('invalid');
     rowsInput.classList.remove('invalid');
     rowsError.textContent = '';

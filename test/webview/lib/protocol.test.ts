@@ -3,7 +3,9 @@ import { test } from 'node:test';
 import {
   EXTENSION_MESSAGE_TYPES,
   WEBVIEW_POSTED_MESSAGE_TYPES,
+  clearRowInputErrorOwner,
   getMaxLinesSubmission,
+  isManualRefreshEnabled,
   normalizeLineCountProgress,
   withLineCountState
 } from '../../../src/webview/lib/protocol';
@@ -81,6 +83,36 @@ test('webview max-lines submission uses the defensive fallback message', () => {
     });
   } finally {
     globalThis.String = originalString;
+  }
+});
+
+test('webview row-input errors clear only the edited field owner', () => {
+  // The top bar shares one error text element for two numeric inputs, so typing
+  // in one control must not hide an unrelated invalid state from the other.
+  assert.equal(clearRowInputErrorOwner('maxLines', 'startLine'), 'maxLines');
+  assert.equal(clearRowInputErrorOwner('startLine', 'maxLines'), 'startLine');
+  assert.equal(clearRowInputErrorOwner('maxLines', 'maxLines'), null);
+  assert.equal(clearRowInputErrorOwner('startLine', 'startLine'), null);
+  assert.equal(clearRowInputErrorOwner(null, 'maxLines'), null);
+});
+
+test('webview manual refresh is enabled only for stable manual-refresh states', () => {
+  // Manual Refresh is a recovery action once the viewer is stable, but it must
+  // stay disabled during in-flight loads to avoid overlapping file reads.
+  for (const state of [
+    'limited',
+    'limitedVirtual',
+    'fullReady',
+    'cancelled',
+    'error'
+  ] as const) {
+    assert.equal(isManualRefreshEnabled(false, state), true);
+    assert.equal(isManualRefreshEnabled(true, state), false);
+  }
+
+  for (const state of ['loading', 'previewLoading', 'fullIndexing'] as const) {
+    assert.equal(isManualRefreshEnabled(false, state), false);
+    assert.equal(isManualRefreshEnabled(true, state), false);
   }
 });
 

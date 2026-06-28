@@ -105,10 +105,16 @@ test('raw-line virtual rows stay unwrapped without fixed-height clipping', async
 test('pretty-print rows expose row-level collapse controls', async () => {
   const source = await readExtensionSource();
 
+  // Without a DOM harness, this locks the click path that flips row-collapse
+  // state and rerenders the entry, not just the existence of the button.
   assert.match(source, /className = 'collapse-toggle'/);
   assert.match(source, /setAttribute\('aria-expanded'/);
   assert.match(source, /getCollapsedPreview\(entry\.raw\)/);
   assert.match(source, /getHiddenLineCountText\(entry\.formatted\)/);
+  assert.match(
+    source,
+    /function toggleCollapsedLine\([\s\S]*?collapsedPrettyLines\.has\(entry\.lineNumber\)[\s\S]*?collapsedPrettyLines\.delete\(entry\.lineNumber\)[\s\S]*?collapsedPrettyLines\.add\(entry\.lineNumber\)[\s\S]*?replaceRenderedEntry\(entry, rowMode, virtualized, rowIndex\);/
+  );
   assert.match(
     source,
     /\.collapsed-preview \{[\s\S]*?text-overflow: ellipsis;/
@@ -118,12 +124,22 @@ test('pretty-print rows expose row-level collapse controls', async () => {
 test('pretty-print JSON blocks expose nested collapse controls', async () => {
   const source = await readExtensionSource();
 
+  // Verifies nested block/value toggles update keyed collapse state and replace
+  // the entry; otherwise the controls can render but clicks become no-ops.
   assert.match(source, /getJsonFoldRanges\(entry\.formatted\)/);
   assert.match(source, /className = 'json-fold-toggle'/);
   assert.match(source, /getCollapsedJsonLine\(lines, range\)/);
   assert.match(source, /getLongJsonStringValueLine\(lines\[lineIndex\]\)/);
   assert.match(source, /getJsonValueFoldKey\(entry\.lineNumber, lineIndex\)/);
   assert.match(source, /appendHighlightedJson\(code, codeText\);/);
+  assert.match(
+    source,
+    /function toggleJsonBlock\([\s\S]*?getJsonFoldKey\(entry\.lineNumber, lineIndex\)[\s\S]*?collapsedJsonBlocks\.delete\(foldKey\)[\s\S]*?collapsedJsonBlocks\.add\(foldKey\)[\s\S]*?replaceRenderedEntry\(entry, rowMode, virtualized, rowIndex\);/
+  );
+  assert.match(
+    source,
+    /function toggleJsonValue\([\s\S]*?getJsonValueFoldKey\(entry\.lineNumber, lineIndex\)[\s\S]*?collapsedJsonBlocks\.delete\(foldKey\)[\s\S]*?collapsedJsonBlocks\.add\(foldKey\)[\s\S]*?replaceRenderedEntry\(entry, rowMode, virtualized, rowIndex\);/
+  );
   assert.match(source, /\.pretty-json-line \{[\s\S]*?display: flex;/);
   assert.match(
     source,
@@ -138,6 +154,45 @@ test('pretty-print JSON blocks expose nested collapse controls', async () => {
 test('rows input rejects empty values before posting maxLines updates', async () => {
   const source = await readExtensionSource();
 
+  // Guards the shared error element: clearing one numeric field must not hide
+  // an unrelated invalid state owned by the other field.
+  assert.match(
+    source,
+    /let rowsErrorOwner: RowInputErrorOwner \| null = null;/
+  );
+  assert.match(
+    source,
+    /rowsInput\.addEventListener\('input'[\s\S]*?clearRowsError\('maxLines'\);/
+  );
+  assert.match(
+    source,
+    /startInput\.addEventListener\('input'[\s\S]*?clearRowsError\('startLine'\);/
+  );
+  assert.match(
+    source,
+    /function showRowsError\(message: string\)[\s\S]*?rowsErrorOwner = 'maxLines';[\s\S]*?rowsInput\.classList\.add\('invalid'\);/
+  );
+  assert.match(
+    source,
+    /function showStartLineError\(message: string\)[\s\S]*?rowsErrorOwner = 'startLine';[\s\S]*?startInput\.classList\.add\('invalid'\);/
+  );
+  assert.match(
+    source,
+    /function clearRowsError\(owner: RowInputErrorOwner\)[\s\S]*?clearRowInputErrorOwner\(rowsErrorOwner, owner\)[\s\S]*?if \(!rowsErrorOwner\) \{[\s\S]*?rowsError\.textContent = '';/
+  );
+  assert.match(
+    source,
+    /function clearAllRowsErrors\(\)[\s\S]*?rowsErrorOwner = null;[\s\S]*?startInput\.classList\.remove\('invalid'\);[\s\S]*?rowsInput\.classList\.remove\('invalid'\);/
+  );
+  assert.match(
+    source,
+    /lastSubmittedMaxLines = nextValue;[\s\S]*?clearRowsError\('maxLines'\);/
+  );
+  assert.match(
+    source,
+    /lastSubmittedStartLine = nextValue;[\s\S]*?clearRowsError\('startLine'\);/
+  );
+  assert.match(source, /clearRowsError: clearAllRowsErrors/);
   assert.match(source, /const rawValue = rowsInput\.value\.trim\(\);/);
   assert.match(
     source,
@@ -563,7 +618,9 @@ test('manual refresh button is shown only when auto-refresh is disabled', async 
   const source = await readExtensionSource();
 
   // Verifies every auto-refresh source updates both controls through one path,
-  // so file-load payloads cannot overwrite checkbox/Refresh state.
+  // so file-load payloads cannot overwrite checkbox/Refresh state. Error and
+  // cancelled states must still expose Refresh as a manual recovery action.
+  assert.match(source, /let autoRefreshEnabled = autoRefreshInput\.checked;/);
   assert.match(
     source,
     /autoRefreshInput\.addEventListener\('change'[\s\S]*?type: 'updateAutoRefresh'/
@@ -574,11 +631,23 @@ test('manual refresh button is shown only when auto-refresh is disabled', async 
   );
   assert.match(
     source,
-    /function updateAutoRefreshControls\(autoRefresh[\s\S]*?autoRefreshInput\.checked = autoRefresh;[\s\S]*?refreshButton\.hidden = autoRefresh;/
+    /function updateAutoRefreshControls\(autoRefresh[\s\S]*?autoRefreshEnabled = autoRefresh;[\s\S]*?autoRefreshInput\.checked = autoRefresh;[\s\S]*?refreshButton\.hidden = autoRefresh;[\s\S]*?syncRefreshButtonState\(\);/
   );
   assert.match(
     source,
-    /function enableRefreshWhenVisible\(\)[\s\S]*?refreshButton\.disabled = Boolean\(refreshButton\.hidden\);/
+    /function setControlsDisabled\(disabled: boolean\)[\s\S]*?setDomControlsDisabled\(elements, disabled\);[\s\S]*?syncRefreshButtonState\(\);/
+  );
+  assert.match(
+    source,
+    /function syncRefreshButtonState\(\)[\s\S]*?refreshButton\.disabled = !isManualRefreshEnabled\([\s\S]*?autoRefreshEnabled,[\s\S]*?viewState/
+  );
+  assert.match(
+    source,
+    /function renderError\(message[\s\S]*?setControlsDisabled\(true\);[\s\S]*?syncRefreshButtonState\(\);/
+  );
+  assert.match(
+    source,
+    /function renderCancelled\(\)[\s\S]*?setControlsDisabled\(true\);[\s\S]*?syncRefreshButtonState\(\);/
   );
   assert.match(
     source,
