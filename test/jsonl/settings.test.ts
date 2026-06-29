@@ -4,7 +4,9 @@ import {
   DEFAULT_AUTO_REFRESH,
   DEFAULT_INDENT,
   DEFAULT_INDENT_GUIDES,
+  DEFAULT_MAX_RENDERED_ROW_BYTES,
   DEFAULT_MAX_LINES,
+  DEFAULT_OVERSIZED_ROW_PREVIEW_BYTES,
   INDEXED_PREVIEW_LINE_THRESHOLD,
   getDisplayRowCount,
   normalizeViewerSettings,
@@ -20,13 +22,17 @@ test('settings validation falls back for invalid numbers', () => {
       maxLines: -1,
       indent: 0,
       autoRefresh: 'no',
-      indentGuides: 'no'
+      indentGuides: 'no',
+      maxRenderedRowBytes: 0,
+      oversizedRowPreviewBytes: -1
     }),
     {
       maxLines: DEFAULT_MAX_LINES,
       indent: DEFAULT_INDENT,
       autoRefresh: DEFAULT_AUTO_REFRESH,
-      indentGuides: DEFAULT_INDENT_GUIDES
+      indentGuides: DEFAULT_INDENT_GUIDES,
+      maxRenderedRowBytes: DEFAULT_MAX_RENDERED_ROW_BYTES,
+      oversizedRowPreviewBytes: DEFAULT_OVERSIZED_ROW_PREVIEW_BYTES
     }
   );
 
@@ -35,13 +41,17 @@ test('settings validation falls back for invalid numbers', () => {
       maxLines: 0,
       indent: 4,
       autoRefresh: false,
-      indentGuides: false
+      indentGuides: false,
+      maxRenderedRowBytes: 512,
+      oversizedRowPreviewBytes: 0
     }),
     {
       maxLines: 0,
       indent: 4,
       autoRefresh: false,
-      indentGuides: false
+      indentGuides: false,
+      maxRenderedRowBytes: 512,
+      oversizedRowPreviewBytes: 0
     }
   );
 });

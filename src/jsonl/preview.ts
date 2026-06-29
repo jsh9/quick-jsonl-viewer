@@ -1,7 +1,6 @@
-import * as fs from 'node:fs';
-import * as readline from 'node:readline';
-import { formatJsonlLine, JsonlEntry } from './entries';
+import { getJsonlEntryPlainText, JsonlEntry } from './entries';
 import { throwIfAborted } from './errors';
+import { fetchJsonlRows, indexJsonlFile } from './lineIndex';
 import { ViewerSettings } from './settings';
 
 export interface JsonlPreview {
@@ -21,6 +20,8 @@ export interface ReadJsonlPreviewOptions {
   readonly signal?: AbortSignal;
   readonly onProgress?: (progress: JsonlPreviewProgress) => void;
   readonly progressIntervalMs?: number;
+  readonly maxRowBytes?: number;
+  readonly oversizedPreviewBytes?: number;
 }
 
 export async function readJsonlPreview(
@@ -38,19 +39,10 @@ export async function readJsonlPreview(
     settings.startLine >= 1
       ? settings.startLine
       : 1;
-  const entries: JsonlEntry[] = [];
-  const plainLines: string[] = [];
-  const stream = fs.createReadStream(filePath, { encoding: 'utf8' });
-  const lineReader = readline.createInterface({
-    input: stream,
-    crlfDelay: Infinity
-  });
-
-  let lineNumber = 0;
   const progressIntervalMs = options.progressIntervalMs ?? 100;
   let lastProgressAt = 0;
 
-  const emitProgress = (force: boolean): void => {
+  const emitProgress = (loadedLineCount: number, force: boolean): void => {
     if (!options.onProgress) {
       return;
     }
@@ -63,44 +55,41 @@ export async function readJsonlPreview(
     lastProgressAt = now;
     const displayLimit = settings.maxLines;
     options.onProgress({
-      loadedLineCount: entries.length,
+      loadedLineCount,
       displayLimit,
       percent:
         displayLimit <= 0
           ? 0
-          : Math.min(100, (entries.length / displayLimit) * 100)
+          : Math.min(100, (loadedLineCount / displayLimit) * 100)
     });
   };
 
-  try {
-    emitProgress(true);
+  emitProgress(0, true);
 
-    for await (const line of lineReader) {
-      throwIfAborted(options.signal);
-      lineNumber += 1;
+  const lineLimit =
+    settings.maxLines > 0 ? startLine - 1 + settings.maxLines : undefined;
+  const index = await indexJsonlFile(filePath, {
+    signal: options.signal,
+    lineLimit
+  });
+  throwIfAborted(options.signal);
 
-      if (lineNumber < startLine) {
-        continue;
-      }
+  const startIndex = startLine - 1;
+  const count =
+    settings.maxLines === 0
+      ? Math.max(0, index.indexedLineCount - startIndex)
+      : settings.maxLines;
+  const rows = await fetchJsonlRows(filePath, index, {
+    start: startIndex,
+    count,
+    indent: settings.indent,
+    maxRowBytes: options.maxRowBytes,
+    oversizedPreviewBytes: options.oversizedPreviewBytes
+  });
+  const entries: JsonlEntry[] = rows.entries;
+  const plainLines = entries.map(getJsonlEntryPlainText);
 
-      if (settings.maxLines === 0 || entries.length < settings.maxLines) {
-        entries.push(formatJsonlLine(lineNumber, line, settings.indent));
-        plainLines.push(line);
-        emitProgress(false);
-      }
-
-      if (settings.maxLines > 0 && entries.length >= settings.maxLines) {
-        break;
-      }
-
-      throwIfAborted(options.signal);
-    }
-
-    emitProgress(true);
-  } finally {
-    lineReader.close();
-    stream.destroy();
-  }
+  emitProgress(entries.length, true);
 
   return {
     entries,

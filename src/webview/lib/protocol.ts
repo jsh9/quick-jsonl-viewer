@@ -62,7 +62,15 @@ export interface JsonlErrorEntry {
   error: string;
 }
 
-export type JsonlEntry = JsonlJsonEntry | JsonlErrorEntry;
+export interface JsonlOversizedEntry {
+  kind: 'oversized';
+  lineNumber: number;
+  byteLength: number;
+  limitBytes: number;
+  preview: string;
+}
+
+export type JsonlEntry = JsonlJsonEntry | JsonlErrorEntry | JsonlOversizedEntry;
 
 export interface JsonlPreview {
   entries: JsonlEntry[];

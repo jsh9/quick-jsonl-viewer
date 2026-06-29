@@ -16,6 +16,7 @@ import type {
   JsonlDataState,
   JsonlEntry,
   JsonlJsonEntry,
+  JsonlOversizedEntry,
   JsonlPreviewProgress,
   LineCountState,
   NormalizedLineCountProgress,
@@ -570,7 +571,12 @@ export function createRenderer(context: RendererContext): Renderer {
     const isCollapsed =
       isCollapsible && collapsedPrettyLines.has(entry.lineNumber);
     const row = document.createElement('section');
-    row.className = entry.kind === 'error' ? 'entry error' : 'entry';
+    row.className =
+      entry.kind === 'error'
+        ? 'entry error'
+        : entry.kind === 'oversized'
+          ? 'entry oversized'
+          : 'entry';
     row.dataset.lineNumber = String(entry.lineNumber);
     if (isCollapsed) {
       row.classList.add('collapsed');
@@ -598,7 +604,9 @@ export function createRenderer(context: RendererContext): Renderer {
     const body = document.createElement('div');
     body.className = 'line-body';
 
-    if (entry.kind === 'json' && isCollapsed) {
+    if (entry.kind === 'oversized') {
+      body.append(renderOversizedEntry(entry));
+    } else if (entry.kind === 'json' && isCollapsed) {
       body.append(renderCollapsedSummary(entry));
     } else if (entry.kind === 'error' && rowMode === 'pretty') {
       const error = document.createElement('p');
@@ -669,6 +677,27 @@ export function createRenderer(context: RendererContext): Renderer {
       lineIndex = range && isCollapsed ? range.endLine + 1 : lineIndex + 1;
     }
 
+    return container;
+  }
+
+  function renderOversizedEntry(entry: JsonlOversizedEntry): HTMLElement {
+    const container = document.createElement('div');
+    container.className = 'oversized-row';
+
+    const warning = document.createElement('p');
+    warning.className = 'oversized-warning';
+    warning.textContent =
+      'Line skipped: ' +
+      formatBytes(entry.byteLength) +
+      ' exceeds the ' +
+      formatBytes(entry.limitBytes) +
+      ' per-row rendering limit.';
+
+    const preview = document.createElement('pre');
+    preview.className = 'oversized-preview';
+    preview.textContent = entry.preview || 'No preview available.';
+
+    container.append(warning, preview);
     return container;
   }
 

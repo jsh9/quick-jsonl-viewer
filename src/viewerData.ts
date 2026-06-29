@@ -157,6 +157,8 @@ export async function postJsonlData(
 
     const preview = await readJsonlPreview(uri.fsPath, settings, {
       signal,
+      maxRowBytes: settings.maxRenderedRowBytes,
+      oversizedPreviewBytes: settings.oversizedRowPreviewBytes,
       onProgress: (progress) => {
         if (generation !== getLatestGeneration()) {
           return;

@@ -193,6 +193,8 @@ export class JsonlViewerProvider implements vscode.CustomReadonlyEditorProvider<
         {
           maxLines: currentSettings.maxLines,
           indent: currentSettings.indent,
+          maxRenderedRowBytes: currentSettings.maxRenderedRowBytes,
+          oversizedRowPreviewBytes: currentSettings.oversizedRowPreviewBytes,
           startLine
         },
         (index) => {
@@ -289,7 +291,9 @@ export class JsonlViewerProvider implements vscode.CustomReadonlyEditorProvider<
       const rows = await fetchJsonlRows(document.uri.fsPath, fullIndex, {
         start: fileStart,
         count,
-        indent: currentSettings.indent
+        indent: currentSettings.indent,
+        maxRowBytes: currentSettings.maxRenderedRowBytes,
+        oversizedPreviewBytes: currentSettings.oversizedRowPreviewBytes
       });
 
       if (requestGeneration !== generation) {
@@ -510,10 +514,16 @@ export class JsonlViewerProvider implements vscode.CustomReadonlyEditorProvider<
 
         if (
           event.affectsConfiguration(`${SETTINGS_SECTION}.maxLines`) ||
-          event.affectsConfiguration(`${SETTINGS_SECTION}.indent`)
+          event.affectsConfiguration(`${SETTINGS_SECTION}.indent`) ||
+          event.affectsConfiguration(
+            `${SETTINGS_SECTION}.maxRenderedRowBytes`
+          ) ||
+          event.affectsConfiguration(
+            `${SETTINGS_SECTION}.oversizedRowPreviewBytes`
+          )
         ) {
-          // Row count and indentation affect rendered data, so they still
-          // reload the current viewer.
+          // Row count, indentation, and row guard limits affect rendered data,
+          // so they still reload the current viewer.
           currentSettings = getSettings();
           safeLoad();
         }

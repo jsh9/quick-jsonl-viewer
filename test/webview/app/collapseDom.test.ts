@@ -281,6 +281,16 @@ interface JsonEntry {
   readonly formatted: string;
 }
 
+interface OversizedEntry {
+  readonly kind: 'oversized';
+  readonly lineNumber: number;
+  readonly byteLength: number;
+  readonly limitBytes: number;
+  readonly preview: string;
+}
+
+type JsonlEntry = JsonEntry | OversizedEntry;
+
 function appendNodes(
   parent: FakeElement | FakeFragment,
   nodes: Array<FakeNodeLike | string>
@@ -451,7 +461,7 @@ function createJsonEntry(): JsonEntry {
   };
 }
 
-function postData(window: FakeWindow, entry: JsonEntry): void {
+function postData(window: FakeWindow, entry: JsonlEntry): void {
   window.dispatchMessage({
     type: 'data',
     payload: {
@@ -465,7 +475,7 @@ function postData(window: FakeWindow, entry: JsonEntry): void {
         displayLimit: 20,
         entries: [entry],
         loadedLineCount: 1,
-        plainText: entry.raw
+        plainText: entry.kind === 'json' ? entry.raw : entry.preview
       },
       startLine: 1
     }
@@ -593,4 +603,30 @@ test('webview nested JSON collapse clicks update the rendered row DOM', async ()
     'false'
   );
   assert.match(prettyJsonText(fixture.document), /chars hidden/);
+});
+
+test('webview renders oversized rows without expensive JSON rendering', async () => {
+  const fixture = await createWebviewFixture();
+
+  postData(fixture.window, {
+    kind: 'oversized',
+    lineNumber: 9,
+    byteLength: 2048,
+    limitBytes: 1024,
+    preview: '{"message":"preview only ...'
+  });
+
+  const entry = queryRequired(fixture.document, '.entry[data-line-number="9"]');
+  assert.equal(entry.classList.contains('oversized'), true);
+  assert.equal(fixture.document.querySelector('.collapse-toggle'), null);
+  assert.equal(fixture.document.querySelector('.pretty-json'), null);
+  assert.equal(fixture.document.querySelector('.json-token'), null);
+  assert.match(
+    queryRequired(fixture.document, '.oversized-warning').textContent,
+    /Line skipped:/
+  );
+  assert.match(
+    queryRequired(fixture.document, '.oversized-preview').textContent,
+    /preview only/
+  );
 });

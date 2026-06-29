@@ -153,6 +153,56 @@ test('custom editor can start limited previews from a per-view line', async () =
   }
 });
 
+test('custom editor applies configured oversized row limits to previews', async () => {
+  const harness = loadExtension();
+  const oversizedRaw = '{"message":"' + 'x'.repeat(40) + '"}';
+  const filePath = await writeFixture(
+    'configured-preview-limit.jsonl',
+    oversizedRaw + '\n{"ok":true}'
+  );
+  const panel = new FakeWebviewPanel();
+  try {
+    harness.fake.maxLines = 2;
+    harness.fake.maxRenderedRowBytes = 16;
+    harness.fake.oversizedRowPreviewBytes = 12;
+    const provider = activateAndGetProvider(harness);
+    const uri = FakeUri.file(filePath);
+    const document = await provider.openCustomDocument(uri);
+
+    await provider.resolveCustomEditor(document, panel, {});
+    panel.webview.receive({ type: 'ready' });
+    const data = await waitForMessage<{
+      readonly type: string;
+      readonly payload: {
+        readonly preview: {
+          readonly entries: Array<{
+            readonly kind: string;
+            readonly byteLength?: number;
+            readonly limitBytes?: number;
+            readonly preview?: string;
+          }>;
+          readonly plainText: string;
+        };
+      };
+    }>(panel, (message) => message.type === 'data');
+
+    assert.equal(data.payload.preview.entries[0]?.kind, 'oversized');
+    assert.equal(
+      data.payload.preview.entries[0]?.byteLength,
+      Buffer.byteLength(oversizedRaw)
+    );
+    assert.equal(data.payload.preview.entries[0]?.limitBytes, 16);
+    assert.equal(data.payload.preview.entries[0]?.preview, '{"message":" ...');
+    assert.equal(
+      data.payload.preview.plainText,
+      '{"message":" ...\n{"ok":true}'
+    );
+  } finally {
+    panel.dispose();
+    harness.restore();
+  }
+});
+
 test('custom editor keeps start line local to each viewer', async () => {
   const harness = loadExtension();
   const filePath = await writeFixture(
@@ -378,6 +428,63 @@ test('custom editor can start indexed viewers from a per-view line', async () =>
   }
 });
 
+test('custom editor applies configured oversized row limits to indexed row fetches', async () => {
+  const harness = loadExtension();
+  const oversizedRaw = '{"message":"' + 'x'.repeat(40) + '"}';
+  const filePath = await writeFixture(
+    'configured-index-limit.jsonl',
+    oversizedRaw + '\n{"ok":true}'
+  );
+  const panel = new FakeWebviewPanel();
+  try {
+    harness.fake.maxLines = 0;
+    harness.fake.maxRenderedRowBytes = 16;
+    harness.fake.oversizedRowPreviewBytes = 12;
+    const provider = activateAndGetProvider(harness);
+    const uri = FakeUri.file(filePath);
+    const document = await provider.openCustomDocument(uri);
+
+    await provider.resolveCustomEditor(document, panel, {});
+    panel.webview.receive({ type: 'ready' });
+    await waitForMessage(panel, (message) => message.type === 'fullIndexReady');
+
+    panel.webview.receive({
+      type: 'fetchRows',
+      requestId: 'configured-limit',
+      start: 0,
+      count: 2
+    });
+    const rows = await waitForMessage<{
+      readonly type: string;
+      readonly requestId: string;
+      readonly payload: {
+        readonly entries: Array<{
+          readonly kind: string;
+          readonly byteLength?: number;
+          readonly limitBytes?: number;
+          readonly preview?: string;
+        }>;
+      };
+    }>(
+      panel,
+      (message) =>
+        message.type === 'rows' && message.requestId === 'configured-limit'
+    );
+
+    assert.equal(rows.payload.entries[0]?.kind, 'oversized');
+    assert.equal(
+      rows.payload.entries[0]?.byteLength,
+      Buffer.byteLength(oversizedRaw)
+    );
+    assert.equal(rows.payload.entries[0]?.limitBytes, 16);
+    assert.equal(rows.payload.entries[0]?.preview, '{"message":" ...');
+    assert.equal(rows.payload.entries[1]?.kind, 'json');
+  } finally {
+    panel.dispose();
+    harness.restore();
+  }
+});
+
 test('custom editor indexes far start-line previews with the default row count', async () => {
   const harness = loadExtension();
   const contents = Array.from({ length: 225 }, (_, index) =>
@@ -580,6 +687,18 @@ test('custom editor reloads on settings and matching file saves', async () => {
 
     panel.webview.messages.length = 0;
     harness.fake.fireConfigurationChange(['quickJsonlViewer.indent']);
+    await waitForMessage(panel, (message) => message.type === 'loading');
+
+    panel.webview.messages.length = 0;
+    harness.fake.fireConfigurationChange([
+      'quickJsonlViewer.maxRenderedRowBytes'
+    ]);
+    await waitForMessage(panel, (message) => message.type === 'loading');
+
+    panel.webview.messages.length = 0;
+    harness.fake.fireConfigurationChange([
+      'quickJsonlViewer.oversizedRowPreviewBytes'
+    ]);
     await waitForMessage(panel, (message) => message.type === 'loading');
 
     panel.webview.messages.length = 0;

@@ -219,6 +219,10 @@ export function getWebviewStyles(): string {
       border-color: var(--vscode-inputValidation-warningBorder);
     }
 
+    .entry.oversized {
+      border-color: var(--vscode-inputValidation-infoBorder, var(--vscode-inputValidation-warningBorder));
+    }
+
     .line-number {
       display: flex;
       align-items: flex-start;
@@ -409,6 +413,18 @@ export function getWebviewStyles(): string {
       margin: 0 0 8px;
       color: var(--vscode-inputValidation-warningForeground, var(--vscode-editorWarning-foreground));
       font-weight: 600;
+    }
+
+    .oversized-warning {
+      margin: 0 0 8px;
+      color: var(--vscode-descriptionForeground);
+      font-weight: 600;
+    }
+
+    .oversized-preview {
+      max-height: 12em;
+      overflow: hidden;
+      color: var(--vscode-descriptionForeground);
     }
 
     .progress-panel {

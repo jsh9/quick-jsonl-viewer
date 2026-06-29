@@ -59,7 +59,12 @@ test('package contributes JSONL viewer as the default editor association', async
       readonly configuration?: {
         readonly properties?: Record<
           string,
-          { readonly type?: unknown; readonly default?: unknown }
+          {
+            readonly type?: unknown;
+            readonly default?: unknown;
+            readonly minimum?: unknown;
+            readonly description?: unknown;
+          }
         >;
       };
     };
@@ -149,6 +154,30 @@ test('package contributes JSONL viewer as the default editor association', async
       type: 'boolean',
       default: true,
       description: 'Show vertical indentation guides in Pretty print mode.'
+    }
+  );
+  assert.deepEqual(
+    packageJson.contributes?.configuration?.properties?.[
+      'quickJsonlViewer.maxRenderedRowBytes'
+    ],
+    {
+      type: 'integer',
+      default: 1048576,
+      minimum: 1,
+      description:
+        'Maximum JSONL row size, in bytes, that Quick JSONL Viewer will parse, format, and render. Larger rows are shown as oversized previews.'
+    }
+  );
+  assert.deepEqual(
+    packageJson.contributes?.configuration?.properties?.[
+      'quickJsonlViewer.oversizedRowPreviewBytes'
+    ],
+    {
+      type: 'integer',
+      default: 4096,
+      minimum: 0,
+      description:
+        'Number of leading bytes to show for JSONL rows that exceed the max rendered row size. Set to 0 to hide oversized row previews.'
     }
   );
   // Guards the public settings surface: Start at line is per-view state, so

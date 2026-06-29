@@ -50,9 +50,11 @@ test('prefix indexing stops after the requested line limit without fetching the 
   });
   assert.equal(rows.indexedLineCount, 2);
   assert.equal(rows.entries.length, 2);
-  assert.equal(rows.entries[0]?.raw, '{"a":1}');
-  assert.equal(rows.entries[1]?.raw, '{"b":2}');
-  assert.ok(rows.entries.every((entry) => entry.raw !== '{"c":3}'));
+  assert.equal(getRawEntryText(rows.entries[0]), '{"a":1}');
+  assert.equal(getRawEntryText(rows.entries[1]), '{"b":2}');
+  assert.ok(
+    rows.entries.every((entry) => getRawEntryText(entry) !== '{"c":3}')
+  );
 });
 
 test('prefix indexing is complete when the line limit exceeds file length', async () => {
@@ -150,6 +152,59 @@ test('range fetching returns formatted rows and invalid JSON rows', async () => 
   }
 });
 
+test('range fetching guards oversized rows before parsing them', async () => {
+  const oversizedRaw = '{"message":"' + 'x'.repeat(40) + '"}';
+  const filePath = await writeFixture(
+    'oversized-range.jsonl',
+    oversizedRaw + '\n{"ok":true}'
+  );
+  const index = await indexJsonlFile(filePath, { chunkSize: 8 });
+  const rows = await fetchJsonlRows(filePath, index, {
+    start: 0,
+    count: 2,
+    indent: 2,
+    maxRowBytes: 16,
+    oversizedPreviewBytes: 12
+  });
+
+  assert.equal(rows.entries.length, 2);
+  assert.equal(rows.entries[0]?.kind, 'oversized');
+  if (rows.entries[0]?.kind !== 'oversized') {
+    throw new Error('Expected oversized entry');
+  }
+  assert.equal(rows.entries[0].lineNumber, 1);
+  assert.equal(rows.entries[0].byteLength, Buffer.byteLength(oversizedRaw));
+  assert.equal(rows.entries[0].limitBytes, 16);
+  assert.equal(rows.entries[0].preview, '{"message":" ...');
+
+  assert.equal(rows.entries[1]?.kind, 'json');
+  if (rows.entries[1]?.kind !== 'json') {
+    throw new Error('Expected JSON entry');
+  }
+  assert.equal(rows.entries[1].raw, '{"ok":true}');
+});
+
+test('range fetching measures oversized CRLF rows without line endings', async () => {
+  const oversizedRaw = '{"message":"' + 'x'.repeat(40) + '"}';
+  const filePath = await writeFixture(
+    'oversized-crlf.jsonl',
+    oversizedRaw + '\r\n{"ok":true}\r\n'
+  );
+  const index = await indexJsonlFile(filePath, { chunkSize: 8 });
+  const rows = await fetchJsonlRows(filePath, index, {
+    start: 0,
+    count: 1,
+    indent: 2,
+    maxRowBytes: 16
+  });
+
+  assert.equal(rows.entries[0]?.kind, 'oversized');
+  if (rows.entries[0]?.kind !== 'oversized') {
+    throw new Error('Expected oversized entry');
+  }
+  assert.equal(rows.entries[0].byteLength, Buffer.byteLength(oversizedRaw));
+});
+
 test('range fetching clamps out-of-range requests', async () => {
   const filePath = await writeFixture('range-clamp.jsonl', '{"a":1}\n{"b":2}');
   const index = await indexJsonlFile(filePath);
@@ -223,8 +278,8 @@ test('range fetching strips CRLF carriage returns', async () => {
   });
 
   assert.equal(rows.entries.length, 2);
-  assert.equal(rows.entries[0]?.raw, '{"a":1}');
-  assert.equal(rows.entries[1]?.raw, '{"b":2}');
+  assert.equal(getRawEntryText(rows.entries[0]), '{"a":1}');
+  assert.equal(getRawEntryText(rows.entries[1]), '{"b":2}');
 });
 
 test('indexing and fetching preserve multibyte UTF-8 line offsets', async () => {
@@ -242,7 +297,7 @@ test('indexing and fetching preserve multibyte UTF-8 line offsets', async () => 
 
   assert.deepEqual(index.lineOffsets, [0, Buffer.byteLength(`${first}\n`)]);
   assert.equal(index.fileSize, Buffer.byteLength(contents));
-  assert.equal(rows.entries[0]?.raw, second);
+  assert.equal(getRawEntryText(rows.entries[0]), second);
 });
 
 test('fetchJsonlRows clamps unusual ranges and handles empty byte ranges', async () => {
@@ -287,7 +342,7 @@ test('fetchJsonlRows clamps unusual ranges and handles empty byte ranges', async
   });
   assert.equal(fractional.start, 0);
   assert.equal(fractional.entries.length, 1);
-  assert.equal(fractional.entries[0]?.raw, '{"a":1}');
+  assert.equal(getRawEntryText(fractional.entries[0]), '{"a":1}');
 
   const malformed = await fetchJsonlRows(
     filePath,
@@ -337,4 +392,9 @@ function createAsyncStream(
     },
     destroy: () => undefined
   };
+}
+
+function getRawEntryText(entry: { readonly kind: string } | undefined): string {
+  assert.ok(entry && 'raw' in entry);
+  return entry.raw as string;
 }

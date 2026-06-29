@@ -81,6 +81,48 @@ test('preview reading can start from a later line', async () => {
   assert.doesNotMatch(preview.plainText, /"index":7/);
 });
 
+test('preview reading returns metadata for oversized rows', async () => {
+  const oversizedRaw = '{"message":"' + 'x'.repeat(40) + '"}';
+  const filePath = await writeFixture(
+    'oversized-preview.jsonl',
+    oversizedRaw + '\n{"ok":true}'
+  );
+  const progress: Array<{
+    loadedLineCount: number;
+    displayLimit: number;
+    percent: number;
+  }> = [];
+
+  const preview = await readJsonlPreview(
+    filePath,
+    {
+      maxLines: 2,
+      indent: 2
+    },
+    {
+      maxRowBytes: 16,
+      oversizedPreviewBytes: 12,
+      onProgress: (event) => progress.push(event)
+    }
+  );
+
+  assert.equal(preview.loadedLineCount, 2);
+  assert.equal(preview.entries[0]?.kind, 'oversized');
+  if (preview.entries[0]?.kind !== 'oversized') {
+    throw new Error('Expected oversized entry');
+  }
+
+  assert.equal(preview.entries[0].byteLength, Buffer.byteLength(oversizedRaw));
+  assert.equal(preview.entries[0].limitBytes, 16);
+  assert.equal(preview.entries[0].preview, '{"message":" ...');
+  assert.equal(preview.entries[1]?.kind, 'json');
+  assert.equal(preview.plainText, '{"message":" ...\n{"ok":true}');
+  assert.equal(progress[0]?.loadedLineCount, 0);
+  assert.equal(progress.at(-1)?.loadedLineCount, 2);
+  assert.equal(progress.at(-1)?.displayLimit, 2);
+  assert.equal(progress.at(-1)?.percent, 100);
+});
+
 test('maxLines set to 0 can still read all lines through the preview helper', async () => {
   const filePath = await writeFixture(
     'all-lines.jsonl',

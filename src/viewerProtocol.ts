@@ -18,7 +18,9 @@ export function getSettings(): ViewerSettings {
     maxLines: configuration.get('maxLines'),
     indent: configuration.get('indent'),
     autoRefresh: configuration.get('autoRefresh'),
-    indentGuides: configuration.get('indentGuides')
+    indentGuides: configuration.get('indentGuides'),
+    maxRenderedRowBytes: configuration.get('maxRenderedRowBytes'),
+    oversizedRowPreviewBytes: configuration.get('oversizedRowPreviewBytes')
   });
 }
 

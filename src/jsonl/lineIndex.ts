@@ -1,7 +1,15 @@
 import * as fs from 'node:fs';
 import * as fsp from 'node:fs/promises';
-import { formatJsonlLine, JsonlEntry } from './entries';
+import {
+  createOversizedJsonlEntry,
+  formatJsonlLine,
+  JsonlEntry
+} from './entries';
 import { throwIfAborted } from './errors';
+import {
+  MAX_RENDERED_ROW_BYTES,
+  OVERSIZED_ROW_PREVIEW_BYTES
+} from '../shared/jsonlConstants';
 
 export interface JsonlLineIndex {
   readonly fileSize: number;
@@ -30,6 +38,8 @@ export interface FetchJsonlRowsOptions {
   readonly start: number;
   readonly count: number;
   readonly indent: number;
+  readonly maxRowBytes?: number;
+  readonly oversizedPreviewBytes?: number;
 }
 
 export interface JsonlRows {
@@ -184,9 +194,8 @@ export async function fetchJsonlRows(
     end < lineIndex.lineOffsets.length
       ? lineIndex.lineOffsets[end]
       : lineIndex.indexedEndOffset;
-  const length = endOffset - startOffset;
 
-  if (length <= 0) {
+  if (endOffset - startOffset <= 0) {
     return {
       start,
       entries: [],
@@ -197,17 +206,48 @@ export async function fetchJsonlRows(
   const file = await fsp.open(filePath, 'r');
 
   try {
-    const buffer = new Uint8Array(length);
-    const { bytesRead } = await file.read(buffer, 0, length, startOffset);
-    const text = Buffer.from(buffer.subarray(0, bytesRead)).toString('utf8');
-    const rawLines = text.split('\n').slice(0, end - start);
-    const entries = rawLines.map((raw, index) =>
-      formatJsonlLine(
-        start + index + 1,
-        stripTrailingCarriageReturn(raw),
-        options.indent
-      )
-    );
+    const entries: JsonlEntry[] = [];
+    const maxRowBytes = options.maxRowBytes ?? MAX_RENDERED_ROW_BYTES;
+    const oversizedPreviewBytes =
+      options.oversizedPreviewBytes ?? OVERSIZED_ROW_PREVIEW_BYTES;
+
+    for (let index = start; index < end; index += 1) {
+      const rowStartOffset = lineIndex.lineOffsets[index];
+      const rowEndOffset =
+        index + 1 < lineIndex.lineOffsets.length
+          ? lineIndex.lineOffsets[index + 1]
+          : lineIndex.indexedEndOffset;
+      const byteLength = await getRowContentByteLength(
+        file,
+        rowStartOffset,
+        rowEndOffset - rowStartOffset
+      );
+
+      if (byteLength > maxRowBytes) {
+        const preview = await readRowPreview(
+          file,
+          rowStartOffset,
+          Math.min(byteLength, oversizedPreviewBytes)
+        );
+        entries.push(
+          createOversizedJsonlEntry(index + 1, byteLength, preview, {
+            maxRowBytes,
+            previewLength: oversizedPreviewBytes,
+            isPreviewTruncated: byteLength > oversizedPreviewBytes
+          })
+        );
+        continue;
+      }
+
+      const raw = await readRow(file, rowStartOffset, byteLength);
+      entries.push(
+        formatJsonlLine(index + 1, raw, options.indent, {
+          byteLength,
+          maxRowBytes,
+          previewLength: oversizedPreviewBytes
+        })
+      );
+    }
 
     return {
       start,
@@ -241,4 +281,56 @@ function clampInteger(value: number, minimum: number, maximum: number): number {
 
 function stripTrailingCarriageReturn(value: string): string {
   return value.endsWith('\r') ? value.slice(0, -1) : value;
+}
+
+async function getRowContentByteLength(
+  file: fsp.FileHandle,
+  startOffset: number,
+  length: number
+): Promise<number> {
+  if (length <= 0) {
+    return 0;
+  }
+
+  const tailLength = Math.min(2, length);
+  const tail = new Uint8Array(tailLength);
+  const { bytesRead } = await file.read(
+    tail,
+    0,
+    tailLength,
+    startOffset + length - tailLength
+  );
+  if (bytesRead <= 0) {
+    return length;
+  }
+
+  const lastByte = tail[bytesRead - 1];
+  if (lastByte !== 10) {
+    return length;
+  }
+
+  const previousByte = bytesRead >= 2 ? tail[bytesRead - 2] : undefined;
+  return Math.max(0, length - (previousByte === 13 ? 2 : 1));
+}
+
+async function readRow(
+  file: fsp.FileHandle,
+  startOffset: number,
+  byteLength: number
+): Promise<string> {
+  const buffer = new Uint8Array(byteLength);
+  const { bytesRead } = await file.read(buffer, 0, byteLength, startOffset);
+  return stripTrailingCarriageReturn(
+    Buffer.from(buffer.subarray(0, bytesRead)).toString('utf8')
+  );
+}
+
+async function readRowPreview(
+  file: fsp.FileHandle,
+  startOffset: number,
+  byteLength: number
+): Promise<string> {
+  const buffer = new Uint8Array(byteLength);
+  const { bytesRead } = await file.read(buffer, 0, byteLength, startOffset);
+  return Buffer.from(buffer.subarray(0, bytesRead)).toString('utf8');
 }

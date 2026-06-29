@@ -34,3 +34,33 @@ test('invalid JSON lines stringify non-Error parse failures', () => {
     JSON.parse = originalParse;
   }
 });
+
+test('oversized JSON lines skip parsing and keep a short preview', () => {
+  const originalParse = JSON.parse;
+  let parseCalled = false;
+
+  JSON.parse = ((value: string) => {
+    parseCalled = true;
+    return originalParse(value);
+  }) as typeof JSON.parse;
+  try {
+    const raw = '{"message":"' + 'x'.repeat(40) + '"}';
+    const entry = formatJsonlLine(7, raw, 2, {
+      maxRowBytes: 16,
+      previewLength: 12
+    });
+
+    assert.equal(entry.kind, 'oversized');
+    assert.equal(parseCalled, false);
+    if (entry.kind !== 'oversized') {
+      throw new Error('Expected oversized entry');
+    }
+
+    assert.equal(entry.lineNumber, 7);
+    assert.equal(entry.byteLength, Buffer.byteLength(raw));
+    assert.equal(entry.limitBytes, 16);
+    assert.equal(entry.preview, '{"message":" ...');
+  } finally {
+    JSON.parse = originalParse;
+  }
+});

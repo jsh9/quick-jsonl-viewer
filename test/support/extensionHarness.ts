@@ -161,6 +161,8 @@ export class FakeVscode {
   public indent = 2;
   public autoRefresh = true;
   public indentGuides = true;
+  public maxRenderedRowBytes = 1024 * 1024;
+  public oversizedRowPreviewBytes = 4096;
   public executeCommandError: unknown;
   public configurationUpdateError: unknown;
 
@@ -204,6 +206,14 @@ export class FakeVscode {
 
             if (key === 'indentGuides') {
               return this.indentGuides;
+            }
+
+            if (key === 'maxRenderedRowBytes') {
+              return this.maxRenderedRowBytes;
+            }
+
+            if (key === 'oversizedRowPreviewBytes') {
+              return this.oversizedRowPreviewBytes;
             }
 
             return undefined;
